@@ -1,1 +1,64 @@
-name="scikit-verify"
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scikit-verify"
+description = "Lift NumPy/SciPy code to the mathematics it implements, and verify it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Aadya Chinubhai" }]
+keywords = [
+    "verification",
+    "symbolic",
+    "sympy",
+    "numpy",
+    "scipy",
+    "numerical-analysis",
+    "scientific-computing",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "numpy>=1.26",
+    "sympy>=1.12",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/aadya940/scikit-verify"
+Issues = "https://github.com/aadya940/scikit-verify/issues"
+
+[tool.setuptools.packages.find]
+include = ["skverify*"]
+
+[tool.setuptools_scm]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
