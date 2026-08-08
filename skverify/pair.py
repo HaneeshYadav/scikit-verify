@@ -21,12 +21,24 @@ class Pair:
 
     @staticmethod
     def _formula_of(x):
-        """Formula for an operand: Pair => its formula, raw number => sympy number."""
-        return x.formula if isinstance(x, Pair) else sympy.sympify(x)
+        if isinstance(x, Pair):
+            return x.formula
+        if isinstance(x, np.ndarray):
+            vals = np.unique(x)
+            if len(vals) == 1:  # uniform: zeros, ones, full
+                return sympy.sympify(vals.item())  # constant field, clean
+            raise NotImplementedError(
+                "raw non-uniform ndarray operand — wrap it: Pair.array(name, x)"
+            )
+        return sympy.sympify(x)
 
     @staticmethod
     def _domain_of(x):
-        return x.domain if isinstance(x, Pair) else None
+        if isinstance(x, Pair):
+            return x.domain
+        if isinstance(x, np.ndarray) and x.ndim == 1:
+            return (0, len(x))
+        return None
 
     @staticmethod
     def _merge_domains(*domains):

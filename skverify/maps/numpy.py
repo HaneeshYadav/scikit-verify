@@ -32,6 +32,9 @@ UFUNC_TABLE[np.minimum] = sympy.Min
 UFUNC_TABLE[np.arctan2] = sympy.atan2
 
 
+# FUNCTION TABLE (non-UFUNCS)
+
+
 def _where(cond, a, b):
     domain = Pair._merge_domains(
         Pair._domain_of(cond), Pair._domain_of(a), Pair._domain_of(b)
@@ -48,4 +51,27 @@ def _where(cond, a, b):
     )
 
 
+def _sum(a, axis=None, **kwargs):
+    if kwargs:
+        raise NotImplementedError(f"np.sum kwargs {list(kwargs)} not supported")
+    if not isinstance(a, Pair) or a.domain is None:
+        return np.sum(a)  # plain input, not ours
+    if axis not in (None, 0):
+        raise NotImplementedError("axis reduction beyond 1-D arrives with N-D")
+    lo, hi = a.domain
+    j = sympy.Symbol("j", integer=True)
+    return Pair(
+        np.sum(a.value),
+        sympy.Sum(a.formula.subs(IDX, j), (j, lo, hi - 1)),  # Sum bounds INCLUSIVE
+        None,  # 1-D reduced fully, scalar
+    )
+
+
+def _zeros(shape, **kw):
+    if not isinstance(shape, (int, np.integer)):
+        raise NotImplementedError("N-D creation arrives with N-D")
+    return Pair(np.zeros(shape), sympy.Integer(0), (0, int(shape)))
+
+
+FUNCTION_TABLE[np.sum] = _sum
 FUNCTION_TABLE[np.where] = _where
