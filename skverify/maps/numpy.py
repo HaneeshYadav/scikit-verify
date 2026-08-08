@@ -73,5 +73,30 @@ def _zeros(shape, **kw):
     return Pair(np.zeros(shape), sympy.Integer(0), (0, int(shape)))
 
 
+def _zeros_like(a, **kwargs):
+    if kwargs:
+        raise NotImplementedError(f"zeros_like kwargs {list(kwargs)} not supported")
+    return Pair(np.zeros_like(Pair._value_of(a)), sympy.Integer(0), Pair._domain_of(a))
+
+
+def _ones_like(a, **kwargs):
+    if kwargs:
+        raise NotImplementedError(f"ones_like kwargs {list(kwargs)} not supported")
+    return Pair(np.ones_like(Pair._value_of(a)), sympy.Integer(1), Pair._domain_of(a))
+
+
+def _full_like(a, fill_value, **kwargs):
+    if kwargs:
+        raise NotImplementedError(f"full_like kwargs {list(kwargs)} not supported")
+    return Pair(
+        np.full_like(Pair._value_of(a), Pair._value_of(fill_value)),
+        sympy.sympify(Pair._value_of(fill_value)),
+        Pair._domain_of(a),
+    )
+
+
+FUNCTION_TABLE[np.zeros_like] = _zeros_like
+FUNCTION_TABLE[np.ones_like] = _ones_like
+FUNCTION_TABLE[np.full_like] = _full_like
 FUNCTION_TABLE[np.sum] = _sum
 FUNCTION_TABLE[np.where] = _where
