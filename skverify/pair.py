@@ -170,11 +170,12 @@ class Pair:
         )
 
     def __array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs):
+        if out is not None:
+            raise NotImplementedError("out= is not supported (mutation)")
         for input in inputs:
             if isinstance(input, np.ndarray):
                 if input.ndim > 1:
                     raise NotImplementedError("")
-
         if method != "__call__" or kwargs.get("out") is not None:
             raise NotImplementedError(f"{ufunc.__name__}.{method} not supported")
 
