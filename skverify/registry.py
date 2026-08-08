@@ -1,0 +1,2 @@
+UFUNC_TABLE = {}
+FUNCTION_TABLE = {}

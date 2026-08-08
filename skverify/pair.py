@@ -1,8 +1,9 @@
 import numpy as np
 import sympy
 
-from .maps.numpy import (
+from .registry import (
     UFUNC_TABLE,
+    FUNCTION_TABLE,
 )
 
 IDX = sympy.Symbol("i", integer=True)
@@ -12,6 +13,7 @@ class Pair:
     """Convert math and array style operations to SymPy
     expressions.
     """
+
     def __init__(self, value, formula, domain=None):
         self.value = value  # the real ndarray/scalar, what executes
         self.formula = formula  # the sympy Expr, what it means
@@ -54,7 +56,7 @@ class Pair:
             value=self.value + Pair._value_of(other),
             formula=self.formula
             + Pair._formula_of(other),  # sympy dunder does the rest
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
     def __radd__(self, other):  # handles  2 + u
@@ -64,21 +66,21 @@ class Pair:
         return Pair(
             value=self.value - Pair._value_of(other),
             formula=self.formula - Pair._formula_of(other),
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
     def __rsub__(self, other):  # handles  2 - u   (order matters!)
         return Pair(
             value=Pair._value_of(other) - self.value,
             formula=Pair._formula_of(other) - self.formula,
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
     def __mul__(self, other):
         return Pair(
             value=self.value * Pair._value_of(other),
             formula=self.formula * Pair._formula_of(other),
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
     __rmul__ = __mul__
@@ -91,35 +93,35 @@ class Pair:
             "data-dependent branch on a traced value"  # guard-logging comes later
         )
 
-    def __truediv__(self, other):       # self / other  (if not added yet)
+    def __truediv__(self, other):  # self / other  (if not added yet)
         return Pair(
             value=self.value / Pair._value_of(other),
             formula=self.formula / Pair._formula_of(other),
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
-    def __rtruediv__(self, other):      # other / self
+    def __rtruediv__(self, other):  # other / self
         return Pair(
             value=Pair._value_of(other) / self.value,
             formula=Pair._formula_of(other) / self.formula,
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
-    def __pow__(self, other):           # self ** other
+    def __pow__(self, other):  # self ** other
         return Pair(
             value=self.value ** Pair._value_of(other),
             formula=self.formula ** Pair._formula_of(other),
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
-    def __rpow__(self, other):          # other ** self
+    def __rpow__(self, other):  # other ** self
         return Pair(
             value=Pair._value_of(other) ** self.value,
             formula=Pair._formula_of(other) ** self.formula,
-            domain=Pair._merge_domains(self, Pair._domain_of(other)),
+            domain=Pair._merge_domains(self.domain, Pair._domain_of(other)),
         )
 
-    def __neg__(self):                  # -self
+    def __neg__(self):  # -self
         return Pair(-self.value, -self.formula)
 
     @classmethod
@@ -132,7 +134,7 @@ class Pair:
         return cls(value, sympy.IndexedBase(name)[IDX], domain=(0, len(value)))
 
     def __len__(self):
-        n = self.value.shape[0]                       # truth: the real array
+        n = self.value.shape[0]  # truth: the real array
         assert n == self.domain[1] - self.domain[0], "domain drifted from value"
         return n
 
@@ -145,8 +147,10 @@ class Pair:
         n = len(self)
         start = key.start or 0
         stop = key.stop if key.stop is not None else n
-        if start < 0: start += n
-        if stop < 0: stop += n
+        if start < 0:
+            start += n
+        if stop < 0:
+            stop += n
         return Pair(
             value=self.value[key],
             formula=self.formula.subs(IDX, IDX + start),
@@ -162,19 +166,33 @@ class Pair:
         if method != "__call__" or kwargs.get("out") is not None:
             raise NotImplementedError(f"{ufunc.__name__}.{method} not supported")
 
-        if ufunc is np.add:        return Pair._binary(inputs, Pair.__add__, Pair.__radd__, self)
-        if ufunc is np.subtract:   return Pair._binary(inputs, Pair.__sub__, Pair.__rsub__, self)
-        if ufunc is np.multiply:   return Pair._binary(inputs, Pair.__mul__, Pair.__rmul__, self)
-        if ufunc is np.true_divide:return Pair._binary(inputs, Pair.__truediv__, Pair.__rtruediv__, self)
-        if ufunc is np.power:      return Pair._binary(inputs, Pair.__pow__, Pair.__rpow__, self)
-        if ufunc is np.negative:   return -inputs[0]
+        if ufunc is np.add:
+            return Pair._binary(inputs, Pair.__add__, Pair.__radd__, self)
+        if ufunc is np.subtract:
+            return Pair._binary(inputs, Pair.__sub__, Pair.__rsub__, self)
+        if ufunc is np.multiply:
+            return Pair._binary(inputs, Pair.__mul__, Pair.__rmul__, self)
+        if ufunc is np.true_divide:
+            return Pair._binary(inputs, Pair.__truediv__, Pair.__rtruediv__, self)
+        if ufunc is np.power:
+            return Pair._binary(inputs, Pair.__pow__, Pair.__rpow__, self)
+        if ufunc is np.negative:
+            return -inputs[0]
 
         target = UFUNC_TABLE.get(ufunc)
         if target is None:
             raise NotImplementedError(f"ufunc {ufunc.__name__} not mapped")
 
-        values   = [Pair._value_of(x) for x in inputs]
-        formulas = [Pair._formula_of(x) for x in inputs]    
-        domain   = Pair._merge_domains(*(Pair._domain_of(x) for x in inputs))
+        values = [Pair._value_of(x) for x in inputs]
+        formulas = [Pair._formula_of(x) for x in inputs]
+        domain = Pair._merge_domains(*(Pair._domain_of(x) for x in inputs))
 
         return Pair(ufunc(*values), target(*formulas), domain)
+
+    def __array_function__(self, func, types, args, kwargs):
+        fn = FUNCTION_TABLE.get(func)
+        if fn is None:
+            raise NotImplementedError(
+                "The function is not mapped in `skverify`.",
+            )
+        return fn(*args, **kwargs)
