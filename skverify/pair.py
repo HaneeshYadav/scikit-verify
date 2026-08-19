@@ -13,354 +13,35 @@ from .helpers import (
 
 IDX = axis_idx(0)  # `i`
 
-_GUARDS = []  # branch conditions taken during a trace; harvested by to_sympy
-_OPAQUE = []  # opaque compiled calls made during a trace, with contract verdicts
+from .session import current as _session
 
-# loop provenance: instrumented for/while loops log (watermark, stack)
-# events; a Pair created after an event belongs to that loop context.
-# The grammar of the derivation comes from the program's AST, not from
-# pattern-mining the trace.
-_SEQ_N = 0
-_LOOP_EVENTS = []  # (seq watermark, context stack tuple of (loop_id, iter))
-_LOOP_STACK = []
-
-
-def _loop_iter(loop_id):
-    if _LOOP_STACK and _LOOP_STACK[-1][0] == loop_id:
-        _LOOP_STACK[-1][1] += 1
-    else:
-        _LOOP_STACK.append([loop_id, 0])
-    _LOOP_EVENTS.append((_SEQ_N, tuple((l, i) for l, i in _LOOP_STACK)))
+# Historical aliases into the active TraceSession. These are the SAME
+# list objects the session owns (cleared in place, never rebound), so
+# long-standing imports keep observing live trace state.
+_GUARDS = _session.guards
+_OPAQUE = _session.opaque
+_LOOP_EVENTS = _session.loop_events
+_LOOP_STACK = _session.loop_stack
 
 
-def _loop_end(loop_id):
-    if _LOOP_STACK and _LOOP_STACK[-1][0] == loop_id:
-        _LOOP_STACK.pop()
-    _LOOP_EVENTS.append((_SEQ_N, tuple((l, i) for l, i in _LOOP_STACK)))
 
-
-def _context_of(seq):
-    """The loop context stack active when the node was created."""
-    from bisect import bisect_left
-
-    pos = bisect_left(_LOOP_EVENTS, (seq,)) - 1
-    return _LOOP_EVENTS[pos][1] if pos >= 0 else ()
-
-
-def _fresh_name(base, exprs):
-    taken = set()
-    for e in exprs:
-        taken |= {s.name for s in e.free_symbols}
-    name, c = base, 2
-    while name in taken:
-        name, c = f"{base}{c}", c + 1
-    return sympy.Symbol(name, integer=True)
-
-
-def _generalize(e1, e2, k):
-    """The template both expressions instantiate: equal parts kept,
-    Integers that differ become linear in k (k=0 gives e1, k=1 gives
-    e2). None when the trees differ in any non-Integer way."""
-    if e1 == e2:
-        return e1
-    if isinstance(e1, sympy.Integer) and isinstance(e2, sympy.Integer):
-        return e1 + k * (e2 - e1)
-    if e1.func is not e2.func or len(e1.args) != len(e2.args) or not e1.args:
-        return None
-    args = [_generalize(a, b, k) for a, b in zip(e1.args, e2.args)]
-    if any(a is None for a in args):
-        return None
-    return e1.func(*args)
-
-
-_STEP = sympy.IndexedBase("step")
-
-
-def _delta_steps(steps, nodes=None):
-    """Steps with earlier steps' formulas abstracted to step[m]
-    references, at any distance. Cross-iteration references then
-    generalize as linear index expressions (step[9*n + 37]) instead of
-    breaking the fold.
-
-    sympy flattens Add/Mul, so an accumulator's previous value is not
-    an exact subtree of the next (u0*u1*u2 does not contain u0*u1).
-    With nodes given, the DAG's parents guide a multiset factoring:
-    the parent's args are removed and replaced by its step reference."""
-    index = {id(n): m for m, n in enumerate(nodes)} if nodes else {}
-    mapping = {}
-    deltas = []
-    for m, expr in enumerate(steps):
-        original = expr
-        if (
-            nodes is not None
-            and expr not in mapping
-            and isinstance(expr, (sympy.Add, sympy.Mul))
-        ):
-            for parent in nodes[m]._parents:
-                pi = index.get(id(parent))
-                if pi is None or pi >= m:
-                    continue
-                f = steps[pi]
-                if f.is_Atom or f == expr:
-                    continue
-                args = list(expr.args)
-                if f.func is expr.func:
-                    fargs = list(f.args)
-                    if all(fargs.count(a) <= args.count(a) for a in set(fargs)):
-                        for a in fargs:
-                            args.remove(a)
-                        expr = expr.func(_STEP[pi], *args)
-                        continue
-                if f in args:
-                    args[args.index(f)] = _STEP[pi]
-                    expr = expr.func(*args)
-        if mapping:
-            expr = expr.xreplace(mapping)
-        deltas.append(expr)
-        if not original.is_Atom and original not in mapping:
-            mapping[original] = _STEP[m]
-    return deltas
-
-
-def _fold_runs(deltas, k, min_blocks=3, max_period=24):
-    """Consecutive expressions repeating as one block of templates
-    under k collapse to (templates, start, blocks); period-p blocks
-    cover alternating patterns (gather then write). Every member is
-    verified by exact subs equality before folding. Unfolded
-    expressions stay ((expr,), m, 1)."""
-    items, m = [], 0
-    n = len(deltas)
-    while m < n:
-        folded = False
-        for p in range(1, max_period + 1):
-            if m + 2 * p > n:
-                break
-            ts = [
-                _generalize(deltas[m + j], deltas[m + p + j], k) for j in range(p)
-            ]
-            if any(t is None for t in ts) or not any(t.has(k) for t in ts):
-                continue
-            blocks = 0
-            while m + (blocks + 1) * p <= n and all(
-                ts[j].subs(k, blocks) == deltas[m + blocks * p + j]
-                for j in range(p)
-            ):
-                blocks += 1
-            if blocks >= min_blocks:
-                items.append((tuple(ts), m, blocks))
-                m += blocks * p
-                folded = True
-                break
-        if not folded:
-            items.append(((deltas[m],), m, 1))
-            m += 1
-    return items
-
-
-def _group_tree(entries, depth):
-    """[(context_stack, delta_index)] -> nested items following the
-    program's loop structure: ('step', idx) or
-    ('loop', loop_id, [items per iteration])."""
-    items, i = [], 0
-    while i < len(entries):
-        stack = entries[i][0]
-        if len(stack) <= depth:
-            items.append(("step", entries[i][1]))
-            i += 1
-            continue
-        lid = stack[depth][0]
-        iters, cur, cur_iter = [], [], stack[depth][1]
-        j = i
-        while (
-            j < len(entries)
-            and len(entries[j][0]) > depth
-            and entries[j][0][depth][0] == lid
-        ):
-            if entries[j][0][depth][1] != cur_iter:
-                iters.append(cur)
-                cur, cur_iter = [], entries[j][0][depth][1]
-            cur.append(entries[j])
-            j += 1
-        iters.append(cur)
-        items.append(("loop", lid, [_group_tree(g, depth + 1) for g in iters]))
-        i = j
-    return items
-
-
-# item model for hierarchical folding: (layout, exprs, span, positions).
-# layout is a tuple of ("text", indent, str) and ("expr", indent) slots;
-# exprs fill the expr slots in order; span counts the original units
-# (steps or iterations) the item covers; positions holds each expr's
-# absolute delta index (used to detect accumulator self-references).
-# Two items fold together only when their layouts are IDENTICAL and
-# their exprs generalize -- a fold can never merge structurally
-# different regions.
-
-
-_CLOSED_DUMMY = sympy.Dummy("j", integer=True)
-
-
-def _self_reference(expr, k, base_pos, stride):
-    """The step-reference in expr pointing at THIS slot one iteration
-    back (position stride*k + base_pos - stride), or None."""
-    target = stride * k + base_pos - stride
-    for ref in expr.atoms(sympy.Indexed):
-        if ref.base == _STEP and sympy.expand(ref.indices[0] - target) == 0:
-            return ref
-    return None
-
-
-def _close_form(template, k, selfref, members, stride, base_pos):
-    """A verified closed form for an accumulator template.
-
-    acc + g(k) -> init + Sum(g, ...);  acc * g(k) -> init * Product;
-    a(k)*acc + b(k) -> rsolve when sympy can. Verified by exact doit
-    equality against the unrolled chain for EVERY member; None when
-    the pattern or the proof fails. Function-agnostic: only the
-    template's structure is inspected."""
-    init = members[0]
-    j = _CLOSED_DUMMY  # shared: closed forms must compare equal across folds
-    closed = None
-    if isinstance(template, sympy.Add) and selfref in template.args:
-        g = (template - selfref).xreplace({k: j})
-        closed = init + sympy.Sum(g, (j, 1, k))
-    elif isinstance(template, sympy.Mul) and selfref in template.args:
-        g = (template / selfref).xreplace({k: j})
-        closed = init * sympy.Product(g, (j, 1, k))
-    else:
-        a = template.coeff(selfref)
-        b = sympy.expand(template - a * selfref)
-        if a != 0 and not a.has(selfref, _STEP) and not b.has(selfref):
-            y = sympy.Function("y")
-            try:
-                closed = sympy.rsolve(
-                    y(k) - a * y(k - 1) - b, y(k), {y(0): init}
-                )
-            except (ValueError, NotImplementedError):
-                closed = None
-    if closed is None:
-        return None
-    expected = init
-    for r in range(1, len(members)):
-        prev_ref = _STEP[stride * r + base_pos - stride]
-        expected = members[r].xreplace({prev_ref: expected})
-        got = closed.subs(k, r).doit()
-        if sympy.expand(got - expected) != 0:
-            return None
-    return closed
-
-
-def _fold_seq(items, k, min_run=3, unit="items"):
-    """Fold runs of consecutive items instantiating one template;
-    accumulator slots in a fold get verified closed forms."""
-    out, r, total = [], 0, len(items)
-    while r < total:
-        lay = items[r][0]
-        cand = None
-        if r + 1 < total and items[r + 1][0] == lay:
-            cand = [
-                _generalize(a, b, k)
-                for a, b in zip(items[r][1], items[r + 1][1])
-            ]
-            if any(c is None for c in cand) or not any(c.has(k) for c in cand):
-                cand = None
-        run = 0
-        if cand is not None:
-            while (
-                r + run < total
-                and items[r + run][0] == lay
-                and all(
-                    c.subs(k, run) == e
-                    for c, e in zip(cand, items[r + run][1])
-                )
-            ):
-                run += 1
-        if cand is not None and run >= min_run:
-            pos0 = items[r][3]
-            strides = [b - a for a, b in zip(pos0, items[r + 1][3])]
-            aligned = all(
-                items[r + q][3][j] == pos0[j] + q * strides[j]
-                for q in range(run)
-                for j in range(len(pos0))
-            )
-            exprs = list(cand)
-            if aligned and run <= 200:
-                for j, t in enumerate(cand):
-                    ref = _self_reference(t, k, pos0[j], strides[j])
-                    if ref is None:
-                        continue
-                    closed = _close_form(
-                        t,
-                        k,
-                        ref,
-                        [items[r + q][1][j] for q in range(run)],
-                        strides[j],
-                        pos0[j],
-                    )
-                    if closed is not None:
-                        exprs[j] = closed
-            header = ("text", 0, f"repeat {run} {unit}, {k} = 0..{run - 1}:")
-            layout = (header,) + tuple(
-                (slot[0], slot[1] + 1) + tuple(slot[2:]) for slot in lay
-            )
-            out.append(
-                (
-                    layout,
-                    exprs,
-                    sum(items[r + q][2] for q in range(run)),
-                    pos0,
-                )
-            )
-            r += run
-            continue
-        out.append(items[r])
-        r += 1
-    return out
-
-
-def _merge_items(items, indent=0):
-    """Concatenate items into one (layout, exprs, positions) triple."""
-    layout, exprs, positions = [], [], []
-    for lay, ex, _, pos in items:
-        layout.extend((slot[0], slot[1] + indent) + tuple(slot[2:]) for slot in lay)
-        exprs.extend(ex)
-        positions.extend(pos)
-    return tuple(layout), exprs, positions
-
-
-def _items_of(tree, deltas, ks, depth):
-    """Grouped tree -> folded item list, bottom-up. Loop iterations
-    fold against each other; the loop becomes ONE item so repeated
-    loop instances (comprehensions, per-row calls) fold at the level
-    above."""
-    items = []
-    for it in tree:
-        if it[0] == "step":
-            items.append(((("expr", 0),), [deltas[it[1]]], 1, [it[1]]))
-            continue
-        _, lid, iters = it
-        iter_items = []
-        for group in iters:
-            sub = _items_of(group, deltas, ks, depth + 1)
-            sub = _fold_seq(sub, ks[depth + 1], unit="items")
-            lay, ex, pos = _merge_items(sub)
-            iter_items.append((lay, ex, 1, pos))
-        folded = _fold_seq(iter_items, ks[depth], unit="iterations")
-        layout, exprs, positions = [], [], []
-        r = 0
-        for lay, ex, span, pos in folded:
-            title = (
-                f"loop {lid}, iteration {r}:"
-                if span == 1
-                else f"loop {lid}, iterations {r}..{r + span - 1}:"
-            )
-            layout.append(("text", 0, title))
-            layout.extend((slot[0], slot[1] + 1) + tuple(slot[2:]) for slot in lay)
-            exprs.extend(ex)
-            positions.extend(pos)
-            r += span
-        items.append((tuple(layout), exprs, 1, positions))
-    return items
+from .derivation import (  # noqa: F401  (historical import surface)
+    _CLOSED_DUMMY,
+    _STEP,
+    _close_form,
+    _context_of,
+    _delta_steps,
+    _fold_runs,
+    _fold_seq,
+    _fresh_name,
+    _generalize,
+    _group_tree,
+    _items_of,
+    _loop_end,
+    _loop_iter,
+    _merge_items,
+    _self_reference,
+)
 
 
 class Pair:
@@ -369,7 +50,6 @@ class Pair:
     """
 
     def __init__(self, value, formula, domain=None, steps=None):
-        global _SEQ_N
         self.value = value  # the real ndarray/scalar, what executes
         self.formula = formula  # the sympy Expr, what it means
         # provenance is a DAG of parent Pairs; .steps flattens it on
@@ -377,8 +57,7 @@ class Pair:
         # different branches produce different steps, because different
         # ops ran.
         self._parents = tuple(steps or ())
-        _SEQ_N += 1
-        self._seq = _SEQ_N  # creation order, keys into the loop event log
+        self._seq = _session.next_seq()  # creation order; keys into the loop event log
 
         if domain is not None and len(domain) == 0:
             domain = None  # 0-d allocation: a scalar
@@ -518,45 +197,10 @@ class Pair:
 
     @staticmethod
     def _formula_of(x):
-        if isinstance(x, Pair):
-            return x.formula
-        if isinstance(x, np.ndarray):
-            if x.dtype == object:
-                elems = x.ravel()
-                if all(isinstance(e, Pair) for e in elems):
-                    formulas = [e.formula for e in elems]
-                    if len(set(formulas)) == 1:
-                        # keepdims mean and friends: one scalar in a box
-                        return formulas[0]
-                    from .api import _recompress
+        """Symbolic content of any operand; delegates to skverify.coercion."""
+        from .coercion import formula_of
 
-                    rule = _recompress(formulas)
-                    if rule is not None:
-                        return rule
-                    raise NotImplementedError(
-                        "decompressed operand without a provable pattern"
-                    )
-            vals = np.unique(x)
-            if len(vals) == 1:  # uniform: zeros, ones, full
-                return sympy.sympify(vals.item())  # constant field, clean
-            if x.dtype.kind in "fiub" and x.size <= 4096:
-                # a concrete operand (filter kernels, weights): a named
-                # table, values disclosed -- same treatment as gathers
-                name = f"const_{len(_OPAQUE)}"
-                table = sympy.IndexedBase(name)
-                letters = tuple(axis_idx(ax) for ax in range(x.ndim))
-                _OPAQUE.append(
-                    (
-                        name,
-                        (("table", "concrete"),),
-                        (str(table[letters]), f"{name} = {x.tolist()}"),
-                    )
-                )
-                return table[letters]
-            raise NotImplementedError(
-                "raw non-uniform ndarray operand, wrap it: Pair.array(name, x)"
-            )
-        return sympy.sympify(x)
+        return formula_of(x)
 
     @staticmethod
     def _domain_of(x):
@@ -630,29 +274,17 @@ class Pair:
 
     @staticmethod
     def _numeric(v, copy=True):
-        """Object-dtype numeric arrays coerce to float (the dtype duck
-        leaks into allocations); anything else passes through."""
-        if isinstance(v, np.ndarray):
-            if v.dtype == object:
-                try:
-                    return np.asarray(v, dtype=float)
-                except (TypeError, ValueError):
-                    pass
-            return np.array(v, copy=True) if copy else v
-        return v
+        """Plain-number object arrays -> float; delegates to skverify.coercion."""
+        from .coercion import numeric
+
+        return numeric(v, copy=copy)
 
     @staticmethod
     def _value_of(x):
-        if isinstance(x, Pair):
-            return x.value
-        if isinstance(x, np.ndarray) and x.dtype == object:
-            elems = x.ravel()
-            if any(isinstance(e, Pair) for e in elems):
-                vals = [e.value if isinstance(e, Pair) else e for e in elems]
-                return np.array(vals, dtype=float).reshape(x.shape)
-        if isinstance(x, (list, tuple)) and any(isinstance(e, Pair) for e in x):
-            return type(x)(Pair._value_of(e) for e in x)
-        return x
+        """Concrete numeric content; delegates to skverify.coercion."""
+        from .coercion import value_of
+
+        return value_of(x)
 
     @staticmethod
     def _shift_axes(formula, bounds, ndim):
@@ -1011,11 +643,9 @@ class Pair:
     def _record_write(self, prior_formula, *operands):
         # an in-place write mutates formula; the pre-write state becomes
         # a parent node so the DAG keeps the whole derivation
-        global _SEQ_N
         prior = Pair(self.value, prior_formula, self._axis_bounds, steps=self._parents)
         self._parents = (prior,) + Pair._steps_of(*operands)
-        _SEQ_N += 1
-        self._seq = _SEQ_N  # the write happened NOW; creation seq is stale
+        self._seq = _session.next_seq()  # the write happened NOW; creation seq is stale
 
     def transpose(self, axes=None):
         # u (4x7), u.T: u[i, j] -> u[j, i], bounds ((0,4),(0,7)) -> ((0,7),(0,4))
@@ -1770,96 +1400,10 @@ class Pair:
 
     @staticmethod
     def _opaque_call(func, args, kwargs):
-        """A compiled routine the trace cannot enter: run it on the values,
-        name it in the formula, snapshot inputs against hidden mutation,
-        and record the call with its contract verdicts."""
-        from .contracts import check_call
+        """Seal a compiled call into a named atom; delegates to skverify.atoms."""
+        from .atoms import opaque_call
 
-        pair_args = [a for a in args if isinstance(a, Pair)]
-        snapshots = [
-            np.asarray(a.value).tobytes()
-            for a in pair_args
-            if isinstance(a.value, np.ndarray)
-        ]
-        # the routine gets COPIES: overwrite_ab-style scribbling stays
-        # off the traced values, and the snapshot guard keeps everyone
-        # honest about it
-        values = [Pair._numeric(Pair._value_of(a)) for a in args]
-        kwvalues = {
-            k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
-            for k, v in ((k, Pair._value_of(v)) for k, v in kwargs.items())
-        }
-        # contracts must judge the INPUTS, not overwrite_*-mutated buffers
-        pristine = [
-            np.array(v, copy=True) if isinstance(v, np.ndarray) else v
-            for v in values
-        ]
-        result = func(*values, **kwvalues)
-        after = [
-            np.asarray(a.value).tobytes()
-            for a in pair_args
-            if isinstance(a.value, np.ndarray)
-        ]
-        if snapshots != after:
-            raise NotImplementedError(
-                f"{func.__name__} mutated a traced input in place"
-            )
-        formulas = []
-        n_const = 0
-        for a in args:
-            if isinstance(a, Pair):
-                formulas.append(a.formula)
-            elif np.isscalar(a):
-                formulas.append(sympy.sympify(a))
-            elif isinstance(a, np.ndarray):
-                # a concrete operand: named, so the formula never hides it
-                formulas.append(sympy.Symbol(f"const{n_const}"))
-                n_const += 1
-        # f2py fortran objects report __name__ as "function dgbsv":
-        # keep the identifier part only
-        fname = getattr(func, "__name__", "opaque").split()[-1]
-        call = sympy.Function(fname)(*formulas)
-        if isinstance(result, tuple):
-            # multi-output routine (LAPACK gbsv: lu, piv, x, info): each
-            # float-array output becomes its own atom; integer bookkeeping
-            # (pivots, status) passes through concrete
-            outs = []
-            for pos, res in enumerate(result):
-                if isinstance(res, np.ndarray) and res.dtype.kind in "fc":
-                    base = sympy.IndexedBase(
-                        f"{fname}_{len(_OPAQUE)}_{pos}"
-                    )
-                    letters = tuple(axis_idx(ax) for ax in range(res.ndim))
-                    outs.append(
-                        Pair(
-                            res,
-                            base[letters],
-                            tuple((0, int(n)) for n in res.shape),
-                            steps=Pair._steps_of(*args),
-                        )
-                    )
-                else:
-                    outs.append(res)
-            _OPAQUE.append(
-                check_call(fname, pristine, result)
-                + ((f"{fname}_{len(_OPAQUE)}_*", str(call)),)
-            )
-            return tuple(outs)
-        shape = np.shape(result) if hasattr(result, "shape") else ()
-        if shape:
-            # array output: a fresh indexed symbol, so downstream slicing
-            # and arithmetic work; the definition rides in the record
-            base = sympy.IndexedBase(f"{fname}_{len(_OPAQUE)}")
-            letters = tuple(axis_idx(ax) for ax in range(len(shape)))
-            formula = base[letters]
-            domain = tuple((0, int(n)) for n in shape)
-        else:
-            formula = call
-            domain = None
-        _OPAQUE.append(
-            check_call(fname, pristine, result) + ((str(formula), str(call)),)
-        )
-        return Pair(result, formula, domain=domain, steps=Pair._steps_of(*args))
+        return opaque_call(func, args, kwargs)
 
     def __array_function__(self, func, types, args, kwargs):
         fn = FUNCTION_TABLE.get(func)
