@@ -29,6 +29,7 @@ def to_sympy(fn, *args, **kwargs):
         sys.setrecursionlimit(20000)
 
     _session.reset()
+    _session.instrumented = False
     # reset FIRST: _wrap records disclosures (integer-as-config) into
     # the session, and they must survive to the harvest
     if kwargs:
@@ -48,6 +49,7 @@ def to_sympy(fn, *args, **kwargs):
         # a wall the plain trace cannot pass; retry a semantically
         # identical instrumented copy (math-neutral calls replaced)
         fn_run, sites = instrument(fn)
+        _session.instrumented = True
         if not sites:
             import inspect as _inspect
 
@@ -88,6 +90,63 @@ def to_sympy(fn, *args, **kwargs):
             # preconditions after all
             _GUARDS.extend(pending)
         _session.pending_mask_guards.clear()
+        if _session.recurrences:
+            # folded loops traced through featherweight symbols whose
+            # meanings live in the definitions map. Small certificates
+            # inline (a toy loop should read as its Iterate directly);
+            # large ones STAY FOLDED -- the lemma structure is the
+            # readable form, and xreplace(out.definitions) rebuilds
+            # the monolith for anyone who wants it
+            from .recurrence import inline
+
+            rec_map = dict(_session.recurrences)
+            total = sum(sympy.count_ops(v) for v in rec_map.values())
+            if hasattr(out, "formula") and isinstance(out.formula, sympy.Basic):
+                total += sympy.count_ops(out.formula)
+            if total < 2000:
+                if hasattr(out, "formula") and isinstance(out.formula, sympy.Basic):
+                    f = out.formula
+                    if isinstance(f, sympy.NDimArray):
+                        # per element: the container must be rebuilt
+                        # EVALUATED or its loop size stays a held Mul
+                        out.formula = sympy.ImmutableDenseNDimArray(
+                            [inline(e, rec_map) for e in f], f.shape
+                        )
+                    else:
+                        out.formula = inline(f, rec_map)
+                for i, g in enumerate(_GUARDS):
+                    if isinstance(g, sympy.Basic):
+                        _GUARDS[i] = inline(g, rec_map)
+                out.definitions = {}
+            else:
+                # only definitions the certificate actually REACHES:
+                # the transitive closure from formula and guards. The
+                # repair map holds every probe symbol ever planted;
+                # unreferenced ones are internal bookkeeping, not
+                # certificate content.
+                roots = set()
+                if hasattr(out, "formula"):
+                    f = out.formula
+                    elements = (
+                        list(f) if isinstance(f, sympy.NDimArray) else [f]
+                    )
+                    for e in elements:
+                        if isinstance(e, sympy.Basic):
+                            roots |= e.free_symbols
+                for g in _GUARDS:
+                    if isinstance(g, sympy.Basic):
+                        roots |= g.free_symbols
+                needed = {}
+                frontier = roots & set(rec_map)
+                while frontier:
+                    sym = frontier.pop()
+                    if sym in needed:
+                        continue
+                    needed[sym] = rec_map[sym]
+                    frontier |= rec_map[sym].free_symbols & set(rec_map) - set(needed)
+                out.definitions = needed
+        else:
+            out.definitions = {}
         out.preconditions = sympy.And(*_GUARDS) if _GUARDS else sympy.true
         records = list(_OPAQUE)
         if _session.hashed:
@@ -129,6 +188,11 @@ def _wrap(name, val):
         return val
     if np.isscalar(val):
         return Pair(val, sympy.Symbol(name, real=True))
+    if isinstance(val, np.ndarray):
+        # remembered by NAME: an opaque atom receiving a foreign copy
+        # of this input can disclose the observed equality
+        _session.inputs = getattr(_session, "inputs", {})
+        _session.inputs[name] = np.array(val, copy=True)
     if hasattr(val, "to_numpy") and not isinstance(val, np.ndarray):
         # a DataFrame or Series: welcome it, keep the parameter's name
         val = val.to_numpy(dtype=float)
@@ -295,6 +359,10 @@ def _recompress(formulas):
     element (exact sympy equality); no proof, no fold: returns None and
     the caller keeps the honest unrolled Array. Tries strides 1..3.
     """
+    if any(sympy.count_ops(f) > 1500 for f in formulas):
+        # proof-by-expand is superlinear; on big elements (folded-loop
+        # results embedding recurrence state) the honest Array wins
+        return None
     if len(formulas) < 2:
         return None
     i = axis_idx(0)

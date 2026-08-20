@@ -64,6 +64,41 @@ class Pair:
         # ops ran.
         self._parents = tuple(steps or ())
         self._seq = _session.next_seq()  # creation order; keys into the loop event log
+        # O(1) size estimate: parents' sizes sum (an overestimate under
+        # sharing, which is the safe direction for a tripwire). Walking
+        # the real tree would itself cost the blowup being detected.
+        self._fsize = 1 + sum(
+            getattr(x, "_fsize", 1) for x in self._parents
+        )
+        if _session.loop_stack:
+            from .recurrence import register_pair
+
+            register_pair(self)
+        elif self._grown():
+            # growth tripwire: an unrolling loop on the PLAIN path (no
+            # markers, no folder) snowballs without bound. Blowup is a
+            # wall like any other: raising sends the trace down the
+            # instrumented retry, where loop markers fire and the
+            # recurrence folder keeps formulas finite. The provenance
+            # sum OVERESTIMATES under sharing, so the real size gets
+            # one exact check before the wall fires.
+            real = sympy.count_ops(formula)
+            if real < 10_000 or (
+                getattr(_session, "instrumented", False) and real < 200_000
+            ):
+                # false alarm, or already instrumented (nowhere to
+                # route): recalibrate and let the honest size ride
+                self._fsize = int(real) + 1
+            elif getattr(_session, "instrumented", False):
+                raise NotImplementedError(
+                    "formula grows without bound and the loop cannot "
+                    "fold; the unrolled result would be unusable"
+                )
+            else:
+                raise NotImplementedError(
+                    "formula grows without bound (unrolled iteration); "
+                    "retrying instrumented so the loop folds"
+                )
 
         if domain is not None and len(domain) == 0:
             domain = None  # 0-d allocation: a scalar
@@ -71,6 +106,11 @@ class Pair:
             domain = (domain,)
 
         self._axis_bounds = domain  # for ndarray
+
+    def _grown(self):
+        from .recurrence import GROWTH_LIMIT
+
+        return self._fsize > GROWTH_LIMIT
 
     def _repr_latex_(self):
         # Jupyter renders the formula as mathematics
@@ -890,8 +930,10 @@ class Pair:
         # Branch capture: a scalar condition (if x > 0:) is decided by the
         # concrete lane and RECORDED -- the branch taken becomes a hypothesis
         # on the certificate. to_sympy harvests _GUARDS into .preconditions.
-        if Pair._is_condition(self.formula) and np.ndim(self.value) == 0:
-            outcome = bool(self.value)
+        if Pair._is_condition(self.formula) and np.size(self.value) == 1:
+            # scalar or size-1 array: unambiguous, same as numpy's own
+            # bool() rules
+            outcome = bool(np.asarray(self.value).ravel()[0])
             _GUARDS.append(self.formula if outcome else sympy.Not(self.formula))
             return outcome
         # arrays: ambiguous, like numpy's own error -- use .all()/.any().
@@ -951,6 +993,112 @@ class Pair:
         # decompression to scalar Pairs: each element keeps its formula
         out = self[...] if np.ndim(self.value) else self
         return [out[k] for k in range(len(np.asarray(self.value)))]
+
+    definitions = {}  # folded-loop meanings; set per-result by to_sympy
+
+    def expand_formula(self):
+        """The certificate's formula with every folded definition
+        inlined: the monolithic expression for machine consumers
+        (lambdify, equivalence checking). Can be very large."""
+        from .recurrence import inline
+
+        if not self.definitions:
+            return self.formula
+        f = self.formula
+        if isinstance(f, sympy.NDimArray):
+            return sympy.ImmutableDenseNDimArray(
+                [inline(e, self.definitions) for e in f], f.shape
+            )
+        if isinstance(f, sympy.Basic):
+            return inline(f, self.definitions)
+        return f
+
+    def pretty(self):
+        """The human view: formula and definitions with shared
+        subexpressions cse-named, one small block per definition."""
+        parts = []
+        exprs = []
+        labels = []
+        # definition-before-use order: a definition referencing other
+        # defined symbols prints after them
+        defs = dict(self.definitions)
+        ordered = []
+        placed = set()
+        while defs:
+            progressed = False
+            for sym in list(defs):
+                deps = defs[sym].free_symbols & set(defs) - {sym}
+                if deps <= placed:
+                    ordered.append((sym, defs.pop(sym)))
+                    placed.add(sym)
+                    progressed = True
+            if not progressed:  # cycle safety: dump remainder as-is
+                ordered.extend(defs.items())
+                break
+        for sym, d in ordered:
+            labels.append(str(sym))
+            exprs.append(d)
+        f = self.formula
+        elements = (
+            list(f) if isinstance(f, sympy.NDimArray) else [f]
+        )
+        for k, e in enumerate(elements):
+            if isinstance(e, sympy.Basic):
+                labels.append(f"formula[{k}]" if len(elements) > 1 else "formula")
+                exprs.append(e)
+        # preconditions one conjunct per line: an And is a LIST of
+        # facts, and a list reads as lines; conjuncts join the cse
+        # pass so they share t-names with the formula
+        pre = getattr(self, "preconditions", None)
+        if isinstance(pre, sympy.Basic) and pre is not sympy.true:
+            conjuncts = (
+                list(pre.args) if isinstance(pre, sympy.And) else [pre]
+            )
+            for k, c in enumerate(conjuncts):
+                labels.append(f"assumes[{k}]")
+                exprs.append(c)
+        if not exprs:
+            return str(f)
+        subs, reduced = sympy.cse(
+            exprs, symbols=sympy.numbered_symbols("t"), order="none"
+        )
+        import textwrap
+
+        # header: what was verified, what is assumed -- the reader
+        # sees the certificate's trust story before any mathematics
+        for rec in getattr(self, "unchecked", ()) or ():
+            try:
+                name, checks = rec[0], rec[1]
+                verdicts = ", ".join(f"{c}: {v}" for c, v in checks)
+                parts.append(f"# {name} -- {verdicts}")
+            except Exception:
+                continue
+        if parts:
+            parts.append("")
+
+        rows = [(str(sym), str(e)) for sym, e in subs]
+        rows.append((None, None))  # section break
+        rows.extend(
+            (label, str(e)) for label, e in zip(labels, reduced)
+        )
+        width = max(
+            (len(l) for l, _ in rows if l is not None), default=0
+        )
+        for label, rhs in rows:
+            if label is None:
+                parts.append("")
+                continue
+            lead = f"{label.ljust(width)} = "
+            wrapped = textwrap.wrap(
+                rhs,
+                width=100,
+                initial_indent=lead,
+                subsequent_indent=" " * (width + 3),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            parts.extend(wrapped if wrapped else [lead])
+        return "\n".join(parts)
 
     @property
     def base(self):
@@ -1387,6 +1535,27 @@ class Pair:
 
     def __array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs):
         if out is not None:
+            # in-place into an OBJECT array is honest mutation: each
+            # slot re-binds to a fresh traced scalar (the bag -=
+            # pattern from in-place updates on decompressed values).
+            # Numeric destinations would silently drop formulas.
+            if (
+                method == "__call__"
+                and len(out) == 1
+                and isinstance(out[0], np.ndarray)
+                and out[0].dtype == object
+            ):
+                r = self.__array_ufunc__(ufunc, method, *inputs, **kwargs)
+                if r is NotImplemented:
+                    return r
+                dst = out[0]
+                if isinstance(r, Pair):
+                    for idx in range(dst.size):
+                        dst.ravel()[idx] = r[idx] if r.shape else r
+                else:
+                    for idx, e in enumerate(np.ravel(r)):
+                        dst.ravel()[idx] = e
+                return dst
             raise NotImplementedError("out= is not supported (mutation)")
         if method == "reduce" and ufunc in (np.maximum, np.minimum, np.add):
             a = inputs[0]

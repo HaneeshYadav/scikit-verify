@@ -51,6 +51,10 @@ class TraceSession:
         self.class_twins = {}
         self.hashed = set()
         self.pending_mask_guards = {}
+        self.loop_new = []
+        self.loop_fold = {}
+        self.recurrences = {}
+        self.value_origins = {}
         self.seq = 0
 
     def reset(self):
@@ -68,6 +72,10 @@ class TraceSession:
         self.class_twins.clear()
         self.hashed.clear()
         self.pending_mask_guards.clear()
+        self.loop_new.clear()
+        self.loop_fold.clear()
+        self.recurrences.clear()
+        self.value_origins.clear()
         self.seq = 0
 
     def next_seq(self):

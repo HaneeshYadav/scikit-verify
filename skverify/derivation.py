@@ -38,12 +38,29 @@ def _loop_iter(loop_id):
     else:
         _LOOP_STACK.append([loop_id, 0])
     _LOOP_EVENTS.append((_session.seq, tuple((l, i) for l, i in _LOOP_STACK)))
+    import sys as _sys
+
+    from .recurrence import on_loop_iter
+
+    # the marker runs INSIDE the loop's frame: its locals map traced
+    # values to the program's own variable names, so folded state can
+    # print as alpha_ and coef_ instead of _state83
+    frame = _sys._getframe(1)
+    names = {
+        id(v): k
+        for k, v in frame.f_locals.items()
+        if type(v).__name__ == "Pair"
+    }
+    on_loop_iter(loop_id, _LOOP_STACK[-1][1], names)
 
 
 def _loop_end(loop_id):
     if _LOOP_STACK and _LOOP_STACK[-1][0] == loop_id:
         _LOOP_STACK.pop()
     _LOOP_EVENTS.append((_session.seq, tuple((l, i) for l, i in _LOOP_STACK)))
+    from .recurrence import on_loop_end
+
+    on_loop_end(loop_id)
 
 
 def _context_of(seq):
@@ -71,6 +88,11 @@ def _generalize(e1, e2, k):
     if e1 == e2:
         return e1
     if isinstance(e1, sympy.Integer) and isinstance(e2, sympy.Integer):
+        return e1 + k * (e2 - e1)
+    if isinstance(e1, sympy.Float) and isinstance(e2, sympy.Float):
+        # float constants drift linearly too (float(k) casts); both
+        # consumers verify every instantiation exactly afterwards, so
+        # a wrong lift can only fail a fold, never corrupt a formula
         return e1 + k * (e2 - e1)
     if e1.func is not e2.func or len(e1.args) != len(e2.args) or not e1.args:
         return None
