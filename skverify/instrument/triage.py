@@ -17,7 +17,7 @@ import numpy as np
 
 from ..pair import Pair
 from ..session import current as _session
-from .registries import OPAQUE_CALLABLES
+from .registries import CONCRETE_BY_NAME, OPAQUE_CALLABLES
 
 # The instrumented-function cache is the session's (blank per trace).
 _FN_MEMO = _session.fn_twins
@@ -60,6 +60,22 @@ def _skv_maybe(fn):
     cannot dodge them."""
     if getattr(fn, "__name__", None) in OPAQUE_CALLABLES:
         return _skv_opaque(fn)
+    if getattr(fn, "__name__", None) in CONCRETE_BY_NAME:
+        # inventory routines run on concrete values: their results are
+        # facts about this trace, and their bodies (sorting, boolean
+        # index tricks) are hostile to traced operands
+        def concrete_inventory(*args, **kwargs):
+            vals = [
+                np.asarray(Pair._value_of(a), dtype=float)
+                if _traced(a) or (
+                    isinstance(a, np.ndarray) and a.dtype == object
+                )
+                else a
+                for a in args
+            ]
+            return fn(*vals, **kwargs)
+
+        return concrete_inventory
     if inspect.isbuiltin(fn) and not isinstance(
         getattr(fn, "__self__", None), (np.ndarray, Pair, type(np))
     ):
@@ -85,6 +101,39 @@ def _skv_maybe(fn):
             if sub is not inner:
                 return sub.__get__(fn.__self__)
         return fn
+    if inspect.isfunction(fn) and getattr(fn, "__closure__", None):
+        # a decorated function (validate_params-style): peel the
+        # wrapper chain to the plain inner function and triage THAT --
+        # the same treatment the static callee path gives decorators
+        inner = fn
+        while getattr(inner, "__wrapped__", None) is not None:
+            inner = inner.__wrapped__
+        if (
+            inner is not fn
+            and inspect.isfunction(inner)
+            and not getattr(inner, "__closure__", None)
+            and _twinnable(inner)
+        ):
+            sub = runtime_twin(inner)
+            if sub is not inner:
+                wrapper = fn
+
+                def peeled(*args, **kwargs):
+                    # some wrappers INJECT arguments (sklearn's device
+                    # shims pass xp): a signature mismatch on the
+                    # peeled inner means the wrapper was load-bearing;
+                    # fall back to it untouched
+                    try:
+                        return sub(*args, **kwargs)
+                    except TypeError as e:
+                        if "required positional argument" in str(e) or (
+                            "required keyword-only argument" in str(e)
+                        ):
+                            return wrapper(*args, **kwargs)
+                        raise
+
+                return peeled
+            return fn
     if inspect.isfunction(fn) and not getattr(fn, "__closure__", None):
         if _twinnable(fn) and "__skv" not in fn.__name__:
             if fn in _FN_MEMO:
