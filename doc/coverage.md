@@ -19,9 +19,9 @@ scripts in `coverage/`.
 
 ## statsmodels
 
-**Works (30):** `durbin_watson`, `robust_skewness`, `medcouple`, `mad`, `add_constant`, `pinv_extended`, `OLS.params`, `OLS.resid`, `OLS.fittedvalues`, `OLS.rsquared`, `OLS.rsquared_adj`, `OLS.bse`, `OLS.tvalues`, `OLS.aic`, `OLS.bic`, `OLS.llf`, `OLS.predict`, `OLS.mse_resid`, `OLS.ess`, `OLS.centered_tss`, `OLS.fvalue`, `WLS.params`, `GLS.params`, `OLS.cov_params`, `OLS.HC0_se`, `Huber.rho`, `Huber.psi`, `Tukey.rho`, `acf`, `zscore-ish`
+**Works (32):** `durbin_watson`, `omni_normtest`, `robust_skewness`, `medcouple`, `mad`, `add_constant`, `pinv_extended`, `OLS.params`, `OLS.resid`, `OLS.fittedvalues`, `OLS.rsquared`, `OLS.rsquared_adj`, `OLS.bse`, `OLS.tvalues`, `OLS.aic`, `OLS.bic`, `OLS.llf`, `OLS.predict`, `OLS.mse_resid`, `OLS.ess`, `OLS.centered_tss`, `OLS.fvalue`, `WLS.params`, `GLS.params`, `OLS.cov_params`, `OLS.HC0_se`, `Huber.rho`, `Huber.psi`, `Tukey.rho`, `acf`, `pacf_yw`, `zscore-ish`
 
-**Refuses (14):** `jarque_bera`, `omni_normtest`, `robust_kurtosis`, `OLS.pvalues`, `GLM.gaussian.params`, `GLM.poisson.params`, `GLM.binomial.params`, `GLM.gaussian.mu`, `Poisson.params`, `acovf`, `pacf_yw`, `adfuller_stat`, `RLM.params`, `quantile_reg`
+**Refuses (12):** `jarque_bera`, `robust_kurtosis`, `OLS.pvalues`, `GLM.gaussian.params`, `GLM.poisson.params`, `GLM.binomial.params`, `GLM.gaussian.mu`, `Poisson.params`, `acovf`, `adfuller_stat`, `RLM.params`, `quantile_reg`
 
 **Known walls (1):** `Logit.params`
 

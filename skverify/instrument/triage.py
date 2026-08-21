@@ -165,6 +165,20 @@ def _skv_maybe(fn):
         inner = fn
         while getattr(inner, "__wrapped__", None) is not None:
             inner = inner.__wrapped__
+        if inner is fn:
+            # decorators built without functools.wraps (scipy's
+            # _axis_nan_policy) hide the inner function in a CLOSURE
+            # CELL. A cell holding a function of the wrapper's own
+            # name is that inner function -- exact identification by
+            # the name-preserving convention, not a guess.
+            named = [
+                c.cell_contents
+                for c in fn.__closure__
+                if inspect.isfunction(getattr(c, "cell_contents", None))
+                and c.cell_contents.__name__ == fn.__name__
+            ]
+            if len(named) == 1:
+                inner = named[0]
         if (
             inner is not fn
             and inspect.isfunction(inner)
@@ -174,22 +188,54 @@ def _skv_maybe(fn):
             sub = runtime_twin(inner)
             if sub is not inner:
                 wrapper = fn
+                try:
+                    inner_sig = inspect.signature(inner)
+                except (ValueError, TypeError):
+                    inner_sig = None
+
+                try:
+                    wrap_sig = inspect.signature(wrapper)
+                except (ValueError, TypeError):
+                    wrap_sig = None
 
                 def peeled(*args, **kwargs):
-                    # some wrappers INJECT arguments into the
-                    # inner call: a signature mismatch on the peeled
-                    # inner means the wrapper was load-bearing; fall
-                    # back to it untouched
-                    try:
+                    # some wrappers INJECT arguments into the inner
+                    # call: decide by SIGNATURE, before calling -- a
+                    # text-sniff on TypeError misattributes nested
+                    # errors and silently reverts to the raw wrapper
+                    if inner_sig is None:
                         return sub(*args, **kwargs)
-                    except TypeError as e:
-                        if (
-                            "required positional argument" in str(e)
-                            or "required keyword-only argument" in str(e)
-                            or "unexpected keyword argument" in str(e)
-                        ):
-                            return wrapper(*args, **kwargs)
-                        raise
+                    try:
+                        inner_sig.bind(*args, **kwargs)
+                        return sub(*args, **kwargs)
+                    except TypeError:
+                        pass
+                    # kwargs the wrapper accepts but the inner lacks
+                    # (keepdims, _no_deco, nan_policy variants): drop
+                    # them and peel anyway -- then VERIFY, per call, by
+                    # running the wrapper on the concrete values and
+                    # comparing. Names propose, runs dispose: a peel
+                    # that changes this call's numbers loses to the
+                    # untouched wrapper.
+                    inner_params = set(inner_sig.parameters)
+                    kept = {k: v for k, v in kwargs.items() if k in inner_params}
+                    try:
+                        inner_sig.bind(*args, **kept)
+                        r = sub(*args, **kept)
+                    except Exception:
+                        return wrapper(*args, **kwargs)
+                    from ..coercion import value_of
+
+                    try:
+                        ref = wrapper(
+                            *[value_of(a) for a in args],
+                            **{k: value_of(v) for k, v in kwargs.items()},
+                        )
+                        if _values_match(r, ref):
+                            return r
+                    except Exception:
+                        pass
+                    return wrapper(*args, **kwargs)
 
                 return peeled
             return fn
@@ -284,6 +330,27 @@ def _skv_maybe(fn):
         return fn(*args, **kwargs)
 
     return wrapper
+
+
+def _values_match(r, ref):
+    from ..coercion import value_of
+
+    def flat(x):
+        if isinstance(x, tuple):
+            out = []
+            for e in x:
+                out.extend(flat(e))
+            return out
+        return [np.asarray(value_of(x), dtype=float)]
+
+    try:
+        a, b = flat(r), flat(ref)
+        return len(a) == len(b) and all(
+            np.allclose(x, y, rtol=1e-9, atol=1e-12, equal_nan=True)
+            for x, y in zip(a, b)
+        )
+    except Exception:
+        return False
 
 
 def _traced(a):
