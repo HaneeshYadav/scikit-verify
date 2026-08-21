@@ -269,6 +269,18 @@ def _sum(a, axis=None, **kwargs):
 def _sum_plain(a, axis=None, **kwargs):
     if isinstance(axis, tuple) and len(axis) == 1:
         axis = axis[0]  # scipy normalizes axis to tuples internally
+    # numpy passes np._NoValue sentinels for unset options
+    kwargs = {
+        k: v for k, v in kwargs.items() if v is not np._NoValue
+    }
+    where = kwargs.pop("where", True)
+    if where is not True:
+        # a masked sum IS the sum of the masked selection, exactly
+        if not isinstance(where, (Pair, np.ndarray)):
+            where = np.asarray(where)
+        return _sum_plain(
+            _where(where, a, 0.0), axis=axis, **kwargs
+        )
     keepdims = kwargs.pop("keepdims", False)
     dt = kwargs.pop("dtype", None)
     if dt is not None and np.dtype(dt).kind not in "fc" and np.dtype(dt) != object:
@@ -1140,13 +1152,18 @@ def _mutating_write(np_fn):
                 f"{np_fn.__name__} into a non-traced destination holding "
                 "traced values; assign with dst[...] = src instead"
             )
+        kwargs.pop("casting", None)  # dtype bookkeeping, not math
+        w = kwargs.pop("where", True)
         if kwargs:
             raise NotImplementedError(
                 f"{np_fn.__name__} with options is not supported"
             )
         if np_fn is np.copyto:
             (src,) = args
-            dst[...] = src
+            if w is True:
+                dst[...] = src
+            else:
+                dst[w] = src  # masked copy IS a masked write
             return None
         mask, vals = args
         v = np.asarray(Pair._value_of(vals))

@@ -529,6 +529,31 @@ class Pair:
         # u[2:5] = v: the formula becomes a scatter, old rule outside the
         # written region, the value's rule (re-indexed) inside it
         if self._axis_bounds is None:
+            mask_key = (
+                isinstance(key, (Pair, np.ndarray, bool, np.bool_))
+                and np.size(Pair._value_of(key)) == np.size(self.value)
+                and np.asarray(Pair._value_of(key)).dtype.kind == "b"
+            )
+            if mask_key and not np.any(np.asarray(Pair._value_of(key))):
+                return  # all-false mask: no write
+            if (
+                key is Ellipsis
+                or (isinstance(key, tuple) and key == ())
+                or mask_key
+                or (
+                    np.ndim(self.value) == 1
+                    and np.size(self.value) == 1
+                    and key in (0, -1)
+                )
+            ):
+                # full overwrite of a scalar/size-1: the new value
+                # REPLACES both lanes, prior recorded in provenance
+                v = Pair._value_of(val)
+                prior = self.formula
+                self.value = np.asarray(v) if np.ndim(self.value) else v
+                self.formula = Pair._formula_of(val)
+                self._record_write(prior, val)
+                return
             raise TypeError("scalar Pair does not support item assignment")
 
         origin = getattr(self, "_slice_of", None)
@@ -1189,6 +1214,9 @@ class Pair:
         )
         return out
 
+    def dot(self, other):
+        return np.dot(self, other)
+
     @property
     def base(self):
         # memory-ownership bookkeeping, not math: view checks read it
@@ -1452,6 +1480,14 @@ class Pair:
         if isinstance(key, tuple) and key == ():
             return self  # numpy's 0-d unwrap idiom, vals[()]
         if self._axis_bounds is None:
+            if key is Ellipsis or (
+                np.ndim(self.value) == 1
+                and np.size(self.value) == 1
+                and key in (0, -1)
+            ):
+                # 0-d / size-1 unwrap idioms: x[...], x[0] on a
+                # single-element result
+                return self
             raise TypeError("scalar Pair is not subscriptable")
         if isinstance(key, Pair) and Pair._is_condition(key.formula):
             # mask gather u[u > 0]: the selection is data-dependent, but

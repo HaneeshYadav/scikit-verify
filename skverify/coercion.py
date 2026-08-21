@@ -124,6 +124,8 @@ def formula_of(x):
             item = vals.item()
             if isinstance(item, float) and np.isnan(item):
                 return sympy.Symbol("NaN", real=True)
+            if isinstance(item, (bool, np.bool_)):
+                return sympy.Integer(int(item))  # sympify rejects np.bool_
             return sympy.sympify(item)
         if x.dtype.kind in "fiub" and x.size <= 4096:
             # a concrete operand (filter kernels, weights): a named
