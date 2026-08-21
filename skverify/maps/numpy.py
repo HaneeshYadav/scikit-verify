@@ -29,6 +29,25 @@ UFUNC_TABLE.update({getattr(np, k): getattr(sympy, v) for k, v in _RENAMED.items
 
 # Others
 UFUNC_TABLE[np.fabs] = sympy.Abs
+UFUNC_TABLE[np.log1p] = lambda x: sympy.log(1 + x)
+UFUNC_TABLE[np.expm1] = lambda x: sympy.exp(x) - 1
+UFUNC_TABLE[np.log2] = lambda x: sympy.log(x) / sympy.log(2)
+UFUNC_TABLE[np.log10] = lambda x: sympy.log(x) / sympy.log(10)
+UFUNC_TABLE[np.exp2] = lambda x: 2**x
+UFUNC_TABLE[np.cbrt] = lambda x: sympy.real_root(x, 3)
+UFUNC_TABLE[np.square] = lambda x: x**2
+UFUNC_TABLE[np.reciprocal] = lambda x: 1 / x
+UFUNC_TABLE[np.radians] = lambda x: x * sympy.pi / 180
+UFUNC_TABLE[np.degrees] = lambda x: x * 180 / sympy.pi
+UFUNC_TABLE[np.deg2rad] = lambda x: x * sympy.pi / 180
+UFUNC_TABLE[np.rad2deg] = lambda x: x * 180 / sympy.pi
+UFUNC_TABLE[np.trunc] = lambda x: sympy.sign(x) * sympy.floor(sympy.Abs(x))
+UFUNC_TABLE[np.hypot] = lambda a, b: sympy.sqrt(a**2 + b**2)
+UFUNC_TABLE[np.logaddexp] = lambda a, b: sympy.log(sympy.exp(a) + sympy.exp(b))
+UFUNC_TABLE[np.logaddexp2] = lambda a, b: sympy.log(2**a + 2**b) / sympy.log(2)
+UFUNC_TABLE[np.ldexp] = lambda x, n: x * 2**n
+UFUNC_TABLE[np.fmod] = lambda a, b: sympy.sign(a) * sympy.Mod(sympy.Abs(a), sympy.Abs(b))
+UFUNC_TABLE[np.positive] = lambda x: x
 UFUNC_TABLE[np.maximum] = sympy.Max
 UFUNC_TABLE[np.minimum] = sympy.Min
 UFUNC_TABLE[np.arctan2] = sympy.atan2
@@ -1187,7 +1206,39 @@ def _interp(x, xp, fp, left=None, right=None, period=None):
 
 FUNCTION_TABLE[np.select] = _select
 FUNCTION_TABLE[np.interp] = _interp
+def _trace(a, offset=0, **kwargs):
+    if not isinstance(a, Pair) or kwargs or len(a._axis_bounds or ()) != 2:
+        return np.trace(np.asarray(Pair._value_of(a)), offset=offset)
+    (r0, r1), (c0, c1) = a._axis_bounds
+    n = min(r1, c1 - offset) - max(r0, -offset)
+    k = _fresh_dummy(a.formula, 2)
+    body = a.formula.xreplace({axis_idx(0): k, axis_idx(1): k + offset})
+    return Pair(
+        np.trace(np.asarray(a.value), offset=offset),
+        _held_sum(body, (k, max(r0, -offset), max(r0, -offset) + n - 1)),
+        None,
+        steps=(a,),
+    )
+
+
+FUNCTION_TABLE[np.trace] = _trace
 FUNCTION_TABLE[np.nan_to_num] = _nan_to_num
+def _fill_diagonal(a, val, wrap=False):
+    if not isinstance(a, Pair):
+        raise NotImplementedError(
+            "fill_diagonal into a non-traced destination holding traced "
+            "values; assign per element instead"
+        )
+    if wrap or len(a._axis_bounds or ()) != 2:
+        raise NotImplementedError("fill_diagonal: 2-D unwrapped only")
+    n = min(hi - lo for lo, hi in a._axis_bounds)
+    vals = np.broadcast_to(np.asarray(Pair._value_of(val)), (n,))
+    for k in range(n):
+        a[k, k] = vals[k] if not isinstance(val, Pair) else val[k] if val._axis_bounds else val
+    return None
+
+
+FUNCTION_TABLE[np.fill_diagonal] = _fill_diagonal
 FUNCTION_TABLE[np.copyto] = _mutating_write(np.copyto)
 FUNCTION_TABLE[np.place] = _mutating_write(np.place)
 FUNCTION_TABLE[np.putmask] = _mutating_write(np.putmask)
