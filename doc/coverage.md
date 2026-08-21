@@ -1,10 +1,11 @@
 # Coverage
 
-Functions we have run through `to_sympy`, and what happened.
-**works** means the traced value matched the library exactly on
-that call; **refuses** means a one-sentence refusal (see
-[sharp bits](sharp-bits.md)). Regenerate with the batteries in
-`batteries/`.
+Every function we have run through `to_sympy`, and what happened.
+**Works** means the traced value matched the library exactly on
+that call. **Refuses** means a one-sentence refusal instead of a
+result -- the rules behind refusals are in
+[sharp bits](sharp-bits.md). Regenerate this page with the
+batteries in `batteries/`.
 
 ## NumPy / SciPy
 

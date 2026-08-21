@@ -55,10 +55,11 @@ sums), fitted estimators as their closed forms, iterative solvers as
 held recurrences, and compiled routines (LAPACK, Cython) as named terms
 that are checked against their defining equations on every call.
 
-## What works, what refuses
+## What works
 
-- [Coverage](doc/coverage.md) -- every function we have tried, per library
-- [Sharp bits](doc/sharp-bits.md) -- the few rules that make a trace refuse
+[doc/coverage.md](doc/coverage.md) tracks every function we have run
+through `to_sympy`, per library, generated straight from the
+batteries in [`batteries/`](batteries/).
 
 ## Installation
 
