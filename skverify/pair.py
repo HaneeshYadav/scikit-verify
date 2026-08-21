@@ -44,6 +44,21 @@ from .derivation import (  # noqa: F401  (historical import surface)
 )
 
 
+class CertificateText(str):
+    """pretty() output: a plain string everywhere, LaTeX in notebooks.
+
+    print() and str() behave as always; Jupyter finds _repr_latex_ and
+    typesets the same rows as an aligned block. Oversized blocks fall
+    back to text rather than freezing MathJax."""
+
+    _latex = None
+
+    def _repr_latex_(self):
+        if self._latex and len(self._latex) < 200_000:
+            return self._latex
+        return None
+
+
 class Pair:
     """Convert math and array style operations to SymPy
     expressions.
@@ -985,6 +1000,18 @@ class Pair:
 
     # facts about the concrete lane; some library bodies read these
     # before doing any math
+    def isnan(self):
+        # numpy's object-dtype loop convention: validation checks are
+        # concrete facts about this trace, not mathematics (same
+        # doctrine as the CONCRETE registry names)
+        return np.isnan(np.asarray(Pair._value_of(self.value)))
+
+    def isinf(self):
+        return np.isinf(np.asarray(Pair._value_of(self.value)))
+
+    def isfinite(self):
+        return np.isfinite(np.asarray(Pair._value_of(self.value)))
+
     def fill(self, value):
         # ndarray.fill is a whole-array overwrite: both lanes at once
         self[...] = value
@@ -1098,7 +1125,22 @@ class Pair:
                 break_on_hyphens=False,
             )
             parts.extend(wrapped if wrapped else [lead])
-        return "\n".join(parts)
+        tex_rows = [(str(sym), e) for sym, e in subs] + list(
+            zip(labels, reduced)
+        )
+        def tex_label(lbl):
+            # KaTeX rejects raw specials inside \text{}
+            for ch in "\\%$#&_{}":
+                lbl = lbl.replace(ch, "\\" + ch)
+            return lbl
+
+        tex = "".join(
+            r"\text{%s} &= %s \\" % (tex_label(lbl), sympy.latex(e))
+            for lbl, e in tex_rows
+        )
+        out = CertificateText("\n".join(parts))
+        out._latex = r"\begin{aligned}" + tex + r"\end{aligned}"
+        return out
 
     @property
     def base(self):
