@@ -5,7 +5,7 @@ Every function we have run through `to_sympy`, and what happened.
 that call. **Refuses** means a one-sentence refusal instead of a
 result -- the rules behind refusals are in
 [sharp bits](sharp-bits.md). Regenerate this page with the
-batteries in `batteries/`.
+scripts in `coverage/`.
 
 ## NumPy / SciPy
 

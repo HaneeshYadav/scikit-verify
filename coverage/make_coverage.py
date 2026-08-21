@@ -1,6 +1,6 @@
 """Regenerate doc/coverage.md from the battery outputs.
 
-Run each battery, save its stdout next to it as <name>.out, then run
+Run each script, save its stdout next to it as <name>.out, then run
 this. The page is a tracking list: every function we tried, and what
 happened -- nothing else.
 """
@@ -33,7 +33,7 @@ out = [
     "that call. **Refuses** means a one-sentence refusal instead of a",
     "result -- the rules behind refusals are in",
     "[sharp bits](sharp-bits.md). Regenerate this page with the",
-    "batteries in `batteries/`.",
+    "scripts in `coverage/`.",
     "",
 ]
 for title, fname in LIBS:

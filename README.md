@@ -7,6 +7,7 @@
 ![CI](https://github.com/aadya940/scikit-verify/actions/workflows/ci.yml/badge.svg)
 
 * [Source code](https://github.com/aadya940/scikit-verify)
+* [Coverage](doc/coverage.md)
 * [License](https://github.com/aadya940/scikit-verify/blob/master/LICENSE)
 
 scikit-verify is a tracer for numerical Python. It runs your NumPy
@@ -54,12 +55,6 @@ come back as their defining formulas (precision as its ratio of counting
 sums), fitted estimators as their closed forms, iterative solvers as
 held recurrences, and compiled routines (LAPACK, Cython) as named terms
 that are checked against their defining equations on every call.
-
-## What works
-
-[doc/coverage.md](doc/coverage.md) tracks every function we have run
-through `to_sympy`, per library, generated straight from the
-batteries in [`batteries/`](batteries/).
 
 ## Installation
 
