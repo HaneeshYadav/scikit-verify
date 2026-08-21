@@ -98,7 +98,18 @@ def _opaque_call_impl(Pair, func, args, kwargs):
         np.array(v, copy=True) if isinstance(v, np.ndarray) else v
         for v in values
     ]
-    result = func(*values, **kwvalues)
+    try:
+        result = func(*values, **kwvalues)
+    except (ValueError, TypeError) as e:
+        if "contiguous" not in str(e):
+            raise
+        # memory layout is bookkeeping, not mathematics: retry with
+        # the layout the compiled signature demands
+        values = [
+            np.asfortranarray(v) if isinstance(v, np.ndarray) else v
+            for v in values
+        ]
+        result = func(*values, **kwvalues)
     after = [
         np.asarray(a.value).tobytes()
         for a in pair_args

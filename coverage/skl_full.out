@@ -1,6 +1,6 @@
-TOTAL 73 | LIFT+match 57 | lift-unverified 0 | refused 16 | died 0
+TOTAL 73 | LIFT+match 59 | lift-unverified 0 | refused 14 | died 0
 
-LIFT+match: mean_squared_error, root_mean_squared_error, mean_absolute_error, median_absolute_error, max_error, mean_squared_log_error, root_mean_squared_log_error, mean_absolute_percentage_error, r2_score, explained_variance_score, mean_poisson_deviance, mean_gamma_deviance, mean_tweedie_deviance, mean_pinball_loss, d2_absolute_error_score, d2_pinball_score, d2_tweedie_score, accuracy_score, zero_one_loss, hamming_loss, precision_score, recall_score, f1_score, fbeta_score_2, matthews_corrcoef, jaccard_score, balanced_accuracy, cohen_kappa, log_loss, roc_auc_score, average_precision, euclidean_distances, cosine_similarity, cosine_distances, linear_kernel, polynomial_kernel, rbf_kernel, paired_euclidean, paired_cosine, minmax_scale_fn, maxabs_scale_fn, robust_scale, normalize_l2, normalize_l1, normalize_max, StandardScaler, MinMaxScaler, MaxAbsScaler, RobustScaler, Normalizer, PolynomialFeatures, KernelCenterer, LinearRegression, Ridge, BayesianRidge, LinearRegression.predict, Ridge.predict
+LIFT+match: mean_squared_error, root_mean_squared_error, mean_absolute_error, median_absolute_error, max_error, mean_squared_log_error, root_mean_squared_log_error, mean_absolute_percentage_error, r2_score, explained_variance_score, mean_poisson_deviance, mean_gamma_deviance, mean_tweedie_deviance, mean_pinball_loss, d2_absolute_error_score, d2_pinball_score, d2_tweedie_score, accuracy_score, zero_one_loss, hamming_loss, precision_score, recall_score, f1_score, fbeta_score_2, matthews_corrcoef, jaccard_score, balanced_accuracy, cohen_kappa, log_loss, roc_auc_score, average_precision, euclidean_distances, cosine_similarity, cosine_distances, linear_kernel, polynomial_kernel, rbf_kernel, paired_euclidean, paired_cosine, minmax_scale_fn, maxabs_scale_fn, robust_scale, normalize_l2, normalize_l1, normalize_max, StandardScaler, MinMaxScaler, MaxAbsScaler, RobustScaler, Normalizer, PolynomialFeatures, KernelCenterer, LinearRegression, Ridge, Lasso, ElasticNet, BayesianRidge, LinearRegression.predict, Ridge.predict
 
 REFUSED:
   brier_score_loss             [skverify] could not lift this call (ValueEr
@@ -15,8 +15,6 @@ REFUSED:
   binarize                     only boolean Pair keys are supported
   quantile_transform           fancy indexing not supported
   power_transform              var over one axis of N-D not supported yet
-  Lasso                        [skverify] could not lift this call (ValueEr
-  ElasticNet                   [skverify] could not lift this call (ValueEr
   HuberRegressor               [skverify] could not lift this call (TypeErr
   SGDRegressor                 [skverify] could not lift this call (TypeErr
 
