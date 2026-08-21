@@ -9,9 +9,9 @@ scripts in `coverage/`.
 
 ## NumPy / SciPy
 
-**Works (28):** `make_interp_spline(k1)`, `CubicSpline.c0`, `trapezoid`, `simpson`, `cumulative_trapezoid`, `detrend`, `convolve_same`, `solve`, `lstsq`, `cho_solve`, `expm_diag`, `zscore`, `gmean`, `hmean`, `rankdata`, `skew`, `kurtosis`, `sem`, `moment2`, `euclidean`, `cosine_dist`, `erf`, `gammaln`, `expit`, `xlogy`, `softmax`, `logsumexp`, `fft_real`
+**Works (31):** `make_interp_spline(k1)`, `CubicSpline.c0`, `trapezoid`, `simpson`, `cumulative_trapezoid`, `detrend`, `convolve_same`, `solve`, `lstsq`, `cho_solve`, `expm_diag`, `zscore`, `gmean`, `hmean`, `rankdata`, `skew`, `kurtosis`, `sem`, `moment2`, `norm.pdf`, `norm.cdf`, `t.sf`, `euclidean`, `cosine_dist`, `erf`, `gammaln`, `expit`, `xlogy`, `softmax`, `logsumexp`, `fft_real`
 
-**Refuses (4):** `interp1d_linear`, `iqr`, `pearsonr`, `t.sf`
+**Refuses (3):** `interp1d_linear`, `iqr`, `pearsonr`
 
 ## scikit-learn
 

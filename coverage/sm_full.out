@@ -2,7 +2,7 @@ TOTAL 45 | LIFT+match 32 | unverified 0 | refused 12 | died 1
 LIFT: durbin_watson, omni_normtest, robust_skewness, medcouple, mad, add_constant, pinv_extended, OLS.params, OLS.resid, OLS.fittedvalues, OLS.rsquared, OLS.rsquared_adj, OLS.bse, OLS.tvalues, OLS.aic, OLS.bic, OLS.llf, OLS.predict, OLS.mse_resid, OLS.ess, OLS.centered_tss, OLS.fvalue, WLS.params, GLS.params, OLS.cov_params, OLS.HC0_se, Huber.rho, Huber.psi, Tukey.rho, acf, pacf_yw, zscore-ish
 UNVERIFIED: []
 REFUSED:
-   jarque_bera | only boolean Pair keys are supported
+   jarque_bera | [skverify] could not lift this call (TypeError: scal
    robust_kurtosis | [skverify] could not lift this call (TypeError: scal
    OLS.pvalues | [skverify] could not lift this call (TypeError: ufun
    GLM.gaussian.params | [skverify] could not lift this call (TypeError: The 

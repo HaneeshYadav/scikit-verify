@@ -1158,6 +1158,23 @@ def _mutating_write(np_fn):
             raise NotImplementedError(
                 "np.place with a cycled values list is not supported"
             )
+        if isinstance(mask, Pair):
+            # np.place/putmask select by TRUTHINESS: a numeric mask
+            # ((1-cond)+isnan(x) in scipy's distributions) means
+            # nonzero, exactly Ne(f, 0)
+            mf = mask.formula
+            if not Pair._is_condition(mf):
+                mf = sympy.Ne(mf, 0)
+            mask = Pair(
+                np.asarray(Pair._value_of(mask)) != 0,
+                mf,
+                mask._axis_bounds,
+                steps=(mask,),
+            )
+        elif not (
+            isinstance(mask, np.ndarray) and mask.dtype == np.bool_
+        ):
+            mask = np.asarray(Pair._value_of(mask)) != 0
         dst[mask] = vals if np.ndim(vals) == 0 or v.size != 1 else (
             vals[0] if not isinstance(vals, Pair) else vals
         )
