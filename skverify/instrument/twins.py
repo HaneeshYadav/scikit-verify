@@ -97,10 +97,19 @@ def _instrument(fn, depth, seen, extra=None):
     if tree is None or not isinstance(tree.body[0], (ast.FunctionDef,)):
         lam = None
         if tree is not None:
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Lambda):
-                    lam = node
+            # a source line can hold SEVERAL lambdas; pick the one
+            # whose parameters match the live function object, or the
+            # first as a last resort
+            want = fn.__code__.co_varnames[: fn.__code__.co_argcount]
+            candidates = [
+                n for n in ast.walk(tree) if isinstance(n, ast.Lambda)
+            ]
+            for n in candidates:
+                if tuple(a.arg for a in n.args.args) == tuple(want):
+                    lam = n
                     break
+            if lam is None and candidates:
+                lam = candidates[0]
         if lam is None:
             raise TypeError("no function definition found in source")
         fdef = ast.FunctionDef(
