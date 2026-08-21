@@ -1,0 +1,9 @@
+TOTAL 34 | LIFT+match 28 | unverified 2 | refused 4 | died 0
+LIFT: make_interp_spline(k1), CubicSpline.c0, trapezoid, simpson, cumulative_trapezoid, detrend, convolve_same, solve, lstsq, cho_solve, expm_diag, zscore, gmean, hmean, rankdata, skew, kurtosis, sem, moment2, euclidean, cosine_dist, erf, gammaln, expit, xlogy, softmax, logsumexp, fft_real
+UNVERIFIED: ['norm.pdf', 'norm.cdf']
+REFUSED:
+   interp1d_linear | [skverify] could not lift this call (IndexError:
+   iqr | [skverify] could not lift this call (ValueError:
+   pearsonr | [skverify] could not lift this call (ValueError:
+   t.sf | only boolean Pair keys are supported
+DIED:
