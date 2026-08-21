@@ -46,8 +46,8 @@ The contract is exact-or-refuse. If an operation has no faithful
 symbolic form, scikit-verify raises instead of guessing:
 
 ```python
-to_sympy(lambda a: np.round(a).mean(), np.array([1.4, 2.6]))
-# NotImplementedError: rounding a traced value changes the math
+to_sympy(lambda a: a.astype(int).mean(), np.array([1.4, 2.6]))
+# NotImplementedError: astype to non-float would change the math
 ```
 
 This works on real library code, not just kernels: scikit-learn metrics
