@@ -44,6 +44,43 @@ from .derivation import (  # noqa: F401  (historical import surface)
 )
 
 
+class _FlatWriter:
+    """Write-through stand-in for ndarray.flat on a traced array."""
+
+    def __init__(self, pair):
+        self._pair = pair
+
+    def __getitem__(self, key):
+        return self._pair.ravel()[key]
+
+    def __setitem__(self, key, val):
+        pair = self._pair
+        shape = np.shape(pair.value)
+        size = int(np.prod(shape))
+        idxs = np.arange(size)[key]
+        idxs = np.atleast_1d(idxs)
+        vals = val
+        for pos, idx in enumerate(idxs):
+            multi = np.unravel_index(int(idx), shape)
+            elem = (
+                vals[pos]
+                if isinstance(vals, Pair) and vals._axis_bounds
+                else (
+                    np.asarray(Pair._value_of(vals)).ravel()[pos]
+                    if np.ndim(Pair._value_of(vals)) >= 1
+                    else vals
+                )
+            )
+            pair[multi if len(multi) > 1 else multi[0]] = elem
+
+    def __iter__(self):
+        r = self._pair.ravel()
+        return iter(r[k] for k in range(int(np.size(r.value))))
+
+    def __len__(self):
+        return int(np.size(self._pair.value))
+
+
 class CertificateText(str):
     """pretty() output: a plain string everywhere, LaTeX in notebooks.
 
@@ -750,6 +787,10 @@ class Pair:
         """Map a key on the sliced view to the parent's coordinates:
         entry (start, stop, step) turns index i into start + step*i."""
         parts = key if isinstance(key, tuple) else (key,)
+        if any(p is Ellipsis for p in parts):
+            i = next(i for i, p in enumerate(parts) if p is Ellipsis)
+            fill = (slice(None),) * (len(entries) - (len(parts) - 1))
+            parts = parts[:i] + fill + parts[i + 1 :]
         parts = parts + (slice(None),) * (len(entries) - len(parts))
         out = []
         for ax, (entry, k) in enumerate(zip(entries, parts)):
@@ -933,6 +974,15 @@ class Pair:
 
     def __rdivmod__(self, other):
         return (other // self, other % self)
+
+    # NOTE: in-place dunders (__iadd__ etc. routed through
+    # self[...] = self + other) were tried on 2026-08-21 to keep
+    # sklearn's Xr -= mean_ aliasing alive. They fixed the aliasing
+    # direction but regressed Ridge and the predict paths with wrong
+    # VALUES: full-overwrite setitem composes incorrectly with some
+    # view shape. The aliasing design needs its own session; until
+    # then Python's default rebind (correct values, broken aliasing,
+    # caught loudly by the neutrality check) is the honest state.
 
     def __round__(self, ndigits=None):
         # exact except at half-way ties, where Python rounds to even
@@ -1352,9 +1402,10 @@ class Pair:
 
     @property
     def flat(self):
-        # numpy's flat iterator: our flattened view suffices for the
-        # read patterns library code uses
-        return self.ravel()
+        # numpy's flat supports WRITES (A.flat[::n+1] += alpha is the
+        # add-to-diagonal idiom): reads come from the flattened copy,
+        # writes translate elementwise onto the parent
+        return _FlatWriter(self)
 
     def ravel(self, order="C"):
         # flattening is a layout-preserving reshape
@@ -1450,7 +1501,9 @@ class Pair:
 
     @classmethod
     def array(cls, name, value):
-        value = np.asarray(value)
+        # a private COPY: traced in-place arithmetic writes through
+        # Pair.value, and the caller's buffer must never change
+        value = np.array(value)
         if value.ndim > 5:
             raise NotImplementedError(
                 "arrays beyond 5D are not supported.",
