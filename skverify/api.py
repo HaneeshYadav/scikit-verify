@@ -42,9 +42,12 @@ def to_sympy(fn, *args, **kwargs):
         _wrap(name, val)
         for name, val in _infer_names(fn, args[: len(args) - len(kw_wrapped)])
     ]
+    from .atoms import trace_rng
+
     sites = ()
     try:
-        out = _repack(fn(*wrapped, **kw_wrapped))
+        with trace_rng():
+            out = _repack(fn(*wrapped, **kw_wrapped))
     except (NotImplementedError, ValueError, TypeError, AttributeError):
         # a wall the plain trace cannot pass; retry a semantically
         # identical instrumented copy (math-neutral calls replaced)
@@ -75,7 +78,8 @@ def to_sympy(fn, *args, **kwargs):
             ) from plain_err
         _session.reset()
         try:
-            out = _repack(fn_run(*wrapped, **kw_wrapped))
+            with trace_rng():
+                out = _repack(fn_run(*wrapped, **kw_wrapped))
         except NotImplementedError:
             raise  # already a one-sentence refusal
         except Exception as lift_err:

@@ -116,6 +116,19 @@ def _skv_maybe(fn):
 
         return concrete_inventory
     self_arr = getattr(fn, "__self__", None)
+    if isinstance(self_arr, (np.random.Generator, np.random.RandomState)):
+        from ..atoms import RNG_DISTS, _base_draw, rng_draw
+
+        if fn.__name__ in RNG_DISTS:
+            # a random draw: sealed as a distribution-tagged atom, the
+            # generator consumed exactly as in an untraced run
+            base = _base_draw(self_arr, fn.__name__)
+
+            def rng_shim(*args, **kwargs):
+                return rng_draw(base, args, kwargs)
+
+            return rng_shim
+        return fn
     if (
         isinstance(self_arr, np.ndarray)
         and self_arr.dtype == object

@@ -9,6 +9,8 @@ labeled unknown. The mutation snapshot guarantees no routine secretly
 scribbled on traced inputs.
 """
 
+from contextlib import contextmanager as _contextmanager
+
 import numpy as np
 import sympy
 
@@ -71,6 +73,199 @@ def _out_name(prefix, fname, pos):
     if roles and pos < len(roles):
         return f"{prefix}_{roles[pos]}"
     return f"{prefix}_{pos}"
+
+
+# Generator/RandomState draw methods with an exact sympy.stats twin.
+# Each entry: ordered (param, default) pairs matching numpy's call
+# signature (size comes after). A default of None marks a required
+# parameter. Draws outside this table stay concrete, which is also
+# exact: the numbers drawn are the numbers used.
+_RNG_PARAMS = {
+    "normal": (("loc", 0), ("scale", 1)),
+    "standard_normal": (),
+    "uniform": (("low", 0), ("high", 1)),
+    "random": (),
+    "exponential": (("scale", 1),),
+    "standard_exponential": (),
+    "gamma": (("shape", None), ("scale", 1)),
+    "standard_gamma": (("shape", None),),
+    "beta": (("a", None), ("b", None)),
+    "chisquare": (("df", None),),
+    "laplace": (("loc", 0), ("scale", 1)),
+    "logistic": (("loc", 0), ("scale", 1)),
+    "lognormal": (("mean", 0), ("sigma", 1)),
+    "rayleigh": (("scale", 1),),
+    "standard_cauchy": (),
+    "poisson": (("lam", 1),),
+    "binomial": (("n", None), ("p", None)),
+    "geometric": (("p", None),),
+}
+
+RNG_DISTS = set(_RNG_PARAMS)
+
+
+def _rng_dist(name):
+    """(sympy.stats constructor, numpy-params -> sympy-params map)."""
+    import sympy.stats as st
+
+    table = {
+        "normal": (st.Normal, lambda p: (p[0], p[1])),
+        "standard_normal": (st.Normal, lambda p: (0, 1)),
+        "uniform": (st.Uniform, lambda p: (p[0], p[1])),
+        "random": (st.Uniform, lambda p: (0, 1)),
+        # numpy parameterizes by scale, sympy Exponential by rate
+        "exponential": (st.Exponential, lambda p: (1 / p[0],)),
+        "standard_exponential": (st.Exponential, lambda p: (1,)),
+        "gamma": (st.Gamma, lambda p: (p[0], p[1])),
+        "standard_gamma": (st.Gamma, lambda p: (p[0], 1)),
+        "beta": (st.Beta, lambda p: (p[0], p[1])),
+        "chisquare": (st.ChiSquared, lambda p: (p[0],)),
+        "laplace": (st.Laplace, lambda p: (p[0], p[1])),
+        "logistic": (st.Logistic, lambda p: (p[0], p[1])),
+        "lognormal": (st.LogNormal, lambda p: (p[0], p[1])),
+        "rayleigh": (st.Rayleigh, lambda p: (p[0],)),
+        "standard_cauchy": (st.Cauchy, lambda p: (0, 1)),
+        "poisson": (st.Poisson, lambda p: (p[0],)),
+        "binomial": (st.Binomial, lambda p: (p[0], p[1])),
+        "geometric": (st.Geometric, lambda p: (p[0],)),
+    }
+    return table[name]
+
+
+def rng_draw(fn, args, kwargs):
+    """Seal one random draw as a distribution-tagged atom.
+
+    The concrete lane keeps the numbers actually drawn (the generator
+    is consumed exactly as in an untraced run). The symbolic lane gets
+    a sympy.stats random variable for a scalar draw, so E and variance
+    of downstream formulas compute in closed form, or an IndexedBase
+    recorded as iid draws for an array. Distribution parameters that
+    are traced lift symbolically.
+    """
+    from .pair import Pair
+
+    name = fn.__name__
+    spec = _RNG_PARAMS[name]
+
+    def concrete():
+        return fn(
+            *[value_of(a) for a in args],
+            **{k: value_of(v) for k, v in kwargs.items()},
+        )
+
+    extra = set(kwargs) - {p for p, _ in spec} - {"size"}
+    if extra or len(args) > len(spec) + 1:
+        # dtype/out and exotic call shapes: draw concretely, as before
+        return concrete()
+    params = []
+    for i, (pname, default) in enumerate(spec):
+        if i < len(args):
+            params.append(args[i])
+        elif pname in kwargs:
+            params.append(kwargs[pname])
+        elif default is None:
+            return concrete()  # required parameter missing: numpy raises
+        else:
+            params.append(default)
+    size = args[len(spec)] if len(args) > len(spec) else kwargs.get("size")
+    call_kw = {"size": size} if size is not None else {}
+    value = fn(*[value_of(p) for p in params], **call_kw)
+    syms = [
+        p.formula if isinstance(p, Pair) else sympy.sympify(p) for p in params
+    ]
+    ctor, xform = _rng_dist(name)
+    try:
+        dist_args = xform(syms)
+    except Exception:
+        return value
+    desc = f"{ctor.__name__}({', '.join(str(a) for a in dist_args)})"
+    label = f"{name}_{len(_OPAQUE)}"
+    steps = Pair._steps_of(*[p for p in params if isinstance(p, Pair)])
+    if np.shape(value) == ():
+        try:
+            rv = ctor(label, *dist_args)
+        except Exception:
+            return value
+        _OPAQUE.append(
+            (name, (("draw", "concrete"),), (label, f"{label} ~ {desc}"))
+        )
+        return Pair(value, rv, None, steps=steps)
+    base = sympy.IndexedBase(label)
+    letters = tuple(axis_idx(ax) for ax in range(value.ndim))
+    _OPAQUE.append(
+        (
+            name,
+            (("draw", "concrete"),),
+            (f"{label}[...]", f"{label} entries iid ~ {desc}"),
+        )
+    )
+    return Pair(
+        value,
+        base[letters],
+        tuple((0, int(n)) for n in value.shape),
+        steps=steps,
+    )
+
+
+def _base_draw(obj, name):
+    """The numpy implementation of a draw method, bound to obj: never
+    the traced subclass's override, so sealing cannot recurse."""
+    cls = (
+        np.random.Generator
+        if isinstance(obj, np.random.Generator)
+        else np.random.RandomState
+    )
+    return getattr(cls, name).__get__(obj)
+
+
+def _make_traced_generator():
+    def method(name):
+        def draw(self, *args, **kwargs):
+            return rng_draw(_base_draw(self, name), args, kwargs)
+
+        return draw
+
+    return type(
+        "TracedGenerator",
+        (np.random.Generator,),
+        {nm: method(nm) for nm in RNG_DISTS},
+    )
+
+
+_TRACED_GENERATOR = _make_traced_generator()
+
+
+@_contextmanager
+def trace_rng():
+    """While a trace runs, generators born inside the traced code seal
+    their draws: default_rng returns a Generator subclass (isinstance
+    holds) whose draw methods route through rng_draw, and the legacy
+    np.random.* module functions are wrapped the same way. Everything
+    is restored on exit, before any real-run arbitration."""
+    orig_default = np.random.default_rng
+
+    def default_rng(seed=None):
+        return _TRACED_GENERATOR(orig_default(seed).bit_generator)
+
+    def module_wrap(orig):
+        def draw(*args, **kwargs):
+            return rng_draw(orig, args, kwargs)
+
+        return draw
+
+    saved = {}
+    np.random.default_rng = default_rng
+    for nm in RNG_DISTS:
+        orig = getattr(np.random, nm, None)
+        if orig is not None:
+            saved[nm] = orig
+            setattr(np.random, nm, module_wrap(orig))
+    try:
+        yield
+    finally:
+        np.random.default_rng = orig_default
+        for nm, orig in saved.items():
+            setattr(np.random, nm, orig)
 
 
 def _opaque_call_impl(Pair, func, args, kwargs):

@@ -92,6 +92,15 @@ def _skv_method(name, obj, *args, **kwargs):
         return _skv_maybe(getattr(obj, name))(*args, **kwargs)
     if name == "type" and args and isinstance(args[0], Pair):
         return args[0]  # ret.dtype.type(x): a cast on a traced scalar
+    if isinstance(obj, (np.random.Generator, np.random.RandomState)):
+        from ..atoms import RNG_DISTS, _base_draw, rng_draw
+
+        if name in RNG_DISTS:
+            # a random draw: sealed as a distribution-tagged atom, the
+            # generator consumed exactly as in an untraced run. The
+            # numpy base method, so a TracedGenerator never re-seals
+            return rng_draw(_base_draw(obj, name), args, kwargs)
+        return getattr(obj, name)(*args, **kwargs)
     if (
         isinstance(obj, np.ndarray)
         and obj.dtype == object
