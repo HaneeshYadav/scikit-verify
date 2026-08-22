@@ -1,0 +1,45 @@
+TOTAL 38 | LIFT+match 0 | lift-unverified 0 | refused 38 | died 0
+
+LIFT+match: 
+
+REFUSED:
+  sum_squares                  [skverify] could not lift this call (ValueEr
+  norm1                        [skverify] could not lift this call (ValueEr
+  norm2                        [skverify] could not lift this call (ValueEr
+  norm_inf                     [skverify] could not lift this call (ValueEr
+  pnorm_3                      [skverify] could not lift this call (ValueEr
+  abs_sum                      [skverify] could not lift this call (ValueEr
+  square_sum                   [skverify] could not lift this call (ValueEr
+  sqrt_sum                     [skverify] could not lift this call (ValueEr
+  power_sum                    [skverify] could not lift this call (ValueEr
+  pos_sum                      [skverify] could not lift this call (ValueEr
+  neg_sum                      [skverify] could not lift this call (ValueEr
+  maximum_elem                 [skverify] could not lift this call (ValueEr
+  max                          [skverify] could not lift this call (ValueEr
+  min                          [skverify] could not lift this call (ValueEr
+  logistic_sum                 [skverify] could not lift this call (ValueEr
+  entr_sum                     [skverify] could not lift this call (ValueEr
+  kl_div_sum                   [skverify] could not lift this call (ValueEr
+  rel_entr_sum                 [skverify] could not lift this call (ValueEr
+  log_sum_exp                  [skverify] could not lift this call (ValueEr
+  geo_mean                     [skverify] could not lift this call (ValueEr
+  harmonic_mean                [skverify] could not lift this call (ValueEr
+  huber_sum                    [skverify] could not lift this call (ValueEr
+  quad_form                    [skverify] could not lift this call (ValueEr
+  quad_over_lin                [skverify] could not lift this call (ValueEr
+  matrix_frac                  [skverify] could not lift this call (ValueEr
+  trace                        [skverify] could not lift this call (ValueEr
+  lambda_max                   [skverify] could not lift this call (ValueEr
+  lambda_min                   [skverify] could not lift this call (ValueEr
+  sigma_max                    [skverify] could not lift this call (ValueEr
+  normNuc                      [skverify] could not lift this call (ValueEr
+  log_det                      [skverify] could not lift this call (ValueEr
+  tv_1d                        [skverify] could not lift this call (ValueEr
+  residual_norm                [skverify] could not lift this call (ValueEr
+  solve_lstsq                  [skverify] could not lift this call (ValueEr
+  solve_ridge                  [skverify] could not lift this call (ValueEr
+  solve_lasso                  [skverify] could not lift this call (ValueEr
+  solve_nonneg_ls              [skverify] could not lift this call (ValueEr
+  solve_chebyshev              [skverify] could not lift this call (ValueEr
+
+DIED:
