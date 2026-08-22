@@ -407,9 +407,26 @@ def _instrument_class(C, depth, seen):
             wrapper_kind = type(raw) if isinstance(raw, (staticmethod, classmethod)) else None
             members[name] = wrapper_kind(clone) if wrapper_kind else clone
             rebind.append(cell)
-    try:
-        twin = type(C.__name__, tuple(bases), members)
-    except TypeError:
+    # the twin's namespace holds EVERY member of C (instrumented or
+    # raw), so inheriting from C itself adds no behavior -- but it puts
+    # the original in the MRO, so isinstance(twin_instance, C) and
+    # every library type-gate built on it hold. Twinned bases stay
+    # ahead of C so instrumented inherited methods still win.
+    final_bases = [b for b in bases if b is not object]
+    if C not in final_bases:
+        final_bases.append(C)
+    meta = type(C)
+    twin = None
+    for attempt in (tuple(final_bases), tuple(bases)):
+        for m in (meta, type):
+            try:
+                twin = m(C.__name__, attempt, dict(members))
+                break
+            except TypeError:
+                continue
+        if twin is not None:
+            break
+    if twin is None:
         _CLASS_TWINS[C] = (C, ())
         return C, ()
     for cell in rebind:

@@ -1,16 +1,12 @@
-TOTAL 45 | LIFT+match 34 | unverified 0 | refused 10 | died 1
-LIFT: durbin_watson, omni_normtest, robust_skewness, robust_kurtosis, medcouple, mad, add_constant, pinv_extended, OLS.params, OLS.resid, OLS.fittedvalues, OLS.rsquared, OLS.rsquared_adj, OLS.bse, OLS.tvalues, OLS.aic, OLS.bic, OLS.llf, OLS.predict, OLS.mse_resid, OLS.ess, OLS.centered_tss, OLS.fvalue, WLS.params, GLS.params, OLS.cov_params, OLS.HC0_se, Huber.rho, Huber.psi, Tukey.rho, acovf, acf, pacf_yw, zscore-ish
+TOTAL 45 | LIFT+match 38 | unverified 0 | refused 6 | died 1
+LIFT: durbin_watson, omni_normtest, robust_skewness, robust_kurtosis, medcouple, mad, add_constant, pinv_extended, OLS.params, OLS.resid, OLS.fittedvalues, OLS.rsquared, OLS.rsquared_adj, OLS.bse, OLS.tvalues, OLS.aic, OLS.bic, OLS.llf, OLS.predict, OLS.mse_resid, OLS.ess, OLS.centered_tss, OLS.fvalue, WLS.params, GLS.params, OLS.cov_params, OLS.HC0_se, GLM.gaussian.params, GLM.poisson.params, GLM.binomial.params, GLM.gaussian.mu, Huber.rho, Huber.psi, Tukey.rho, acovf, acf, pacf_yw, zscore-ish
 UNVERIFIED: []
 REFUSED:
    jarque_bera | [skverify] could not lift this call (ValueError: set
    OLS.pvalues | [skverify] could not lift this call (TypeError: ufun
-   GLM.gaussian.params | [skverify] could not lift this call (TypeError: The 
-   GLM.poisson.params | [skverify] could not lift this call (TypeError: The 
-   GLM.binomial.params | [skverify] could not lift this call (TypeError: The 
-   GLM.gaussian.mu | [skverify] could not lift this call (TypeError: The 
-   Poisson.params | [skverify] could not lift this call (TypeError: supe
+   Poisson.params | [skverify] could not lift this call (UFuncTypeError:
    adfuller_stat | [skverify] could not lift this call (TO: ). Your cod
-   RLM.params | [skverify] could not lift this call (TypeError: supe
+   RLM.params | [skverify] could not lift this call (IndexError: arr
    quantile_reg | summing over a Piecewise bound inside an inner Sum: 
 DIED:
    Logit.params | LinAlgError Singular matrix

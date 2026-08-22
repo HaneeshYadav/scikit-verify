@@ -15,7 +15,7 @@ REFUSED:
   binarize                     only boolean Pair keys are supported
   quantile_transform           fancy indexing not supported
   power_transform              var over one axis of N-D not supported yet
-  HuberRegressor               [skverify] could not lift this call (TypeErr
+  HuberRegressor               [skverify] could not lift this call (Attribu
   SGDRegressor                 [skverify] could not lift this call (TypeErr
 
 DIED:

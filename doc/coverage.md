@@ -19,9 +19,9 @@ scripts in `coverage/`.
 
 ## statsmodels
 
-**Works (34):** `durbin_watson`, `omni_normtest`, `robust_skewness`, `robust_kurtosis`, `medcouple`, `mad`, `add_constant`, `pinv_extended`, `OLS.params`, `OLS.resid`, `OLS.fittedvalues`, `OLS.rsquared`, `OLS.rsquared_adj`, `OLS.bse`, `OLS.tvalues`, `OLS.aic`, `OLS.bic`, `OLS.llf`, `OLS.predict`, `OLS.mse_resid`, `OLS.ess`, `OLS.centered_tss`, `OLS.fvalue`, `WLS.params`, `GLS.params`, `OLS.cov_params`, `OLS.HC0_se`, `Huber.rho`, `Huber.psi`, `Tukey.rho`, `acovf`, `acf`, `pacf_yw`, `zscore-ish`
+**Works (38):** `durbin_watson`, `omni_normtest`, `robust_skewness`, `robust_kurtosis`, `medcouple`, `mad`, `add_constant`, `pinv_extended`, `OLS.params`, `OLS.resid`, `OLS.fittedvalues`, `OLS.rsquared`, `OLS.rsquared_adj`, `OLS.bse`, `OLS.tvalues`, `OLS.aic`, `OLS.bic`, `OLS.llf`, `OLS.predict`, `OLS.mse_resid`, `OLS.ess`, `OLS.centered_tss`, `OLS.fvalue`, `WLS.params`, `GLS.params`, `OLS.cov_params`, `OLS.HC0_se`, `GLM.gaussian.params`, `GLM.poisson.params`, `GLM.binomial.params`, `GLM.gaussian.mu`, `Huber.rho`, `Huber.psi`, `Tukey.rho`, `acovf`, `acf`, `pacf_yw`, `zscore-ish`
 
-**Refuses (10):** `jarque_bera`, `OLS.pvalues`, `GLM.gaussian.params`, `GLM.poisson.params`, `GLM.binomial.params`, `GLM.gaussian.mu`, `Poisson.params`, `adfuller_stat`, `RLM.params`, `quantile_reg`
+**Refuses (6):** `jarque_bera`, `OLS.pvalues`, `Poisson.params`, `adfuller_stat`, `RLM.params`, `quantile_reg`
 
 **Known walls (1):** `Logit.params`
 
