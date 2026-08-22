@@ -8,8 +8,8 @@
 
 * [Source code](https://github.com/aadya940/scikit-verify)
 * [Coverage](doc/coverage.md)
-* [skverify-mcp](skverify-mcp/) - MCP for mathematical feedback for coding agents
 * [License](https://github.com/aadya940/scikit-verify/blob/master/LICENSE)
+* [skverify-mcp](skverify-mcp/) - MCP for mathematical feedback for coding agents
 
 scikit-verify is a tracer for numerical Python. It runs your NumPy
 function once and returns the formula it computed, as an ordinary SymPy
