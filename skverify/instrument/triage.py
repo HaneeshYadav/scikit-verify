@@ -284,6 +284,22 @@ def _skv_maybe(fn):
         return dispatcher_shim
     if isinstance(fn, np.ufunc):
         def ufunc_shim(*args, **kwargs):
+            if fn.__name__ in ("isnan", "isinf", "isfinite") and any(
+                _traced(a) for a in args
+            ):
+                # validation checks are concrete facts about this
+                # trace, not math (the CONCRETE registry doctrine);
+                # numpy's float-only loops reject bags outright
+                from ..coercion import value_of
+
+                def conc(a):
+                    if isinstance(a, np.ndarray) and a.dtype == object:
+                        return np.asarray(
+                            [value_of(e) for e in a.ravel()], dtype=float
+                        ).reshape(a.shape)
+                    return value_of(a)
+
+                return fn(*[conc(a) for a in args], **kwargs)
             if any(_traced(a) and not isinstance(a, Pair) for a in args):
                 # an object array HOLDING Pairs: numpy's object loop
                 # cannot dispatch a mapped ufunc. Apply elementwise;

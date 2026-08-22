@@ -317,6 +317,19 @@ def _instrument_class(C, depth, seen):
             target, wrap = raw.__func__, staticmethod
         elif isinstance(raw, classmethod):
             target, wrap = raw.__func__, classmethod
+        elif isinstance(raw, property):
+            if raw.fset is None and raw.fdel is None and inspect.isfunction(raw.fget):
+                target, wrap = raw.fget, property
+        elif (
+            hasattr(raw, "fget")
+            and inspect.isfunction(getattr(raw, "fget", None))
+            and type(raw).__module__ not in ("builtins",)
+        ):
+            # cache_readonly-style descriptors (statsmodels, pandas):
+            # twin the wrapped function, rewrap in the SAME descriptor
+            # type so caching semantics survive
+            target = raw.fget
+            wrap = type(raw)
         elif inspect.isfunction(raw):
             target = raw
         elif callable(raw) and getattr(raw, "__wrapped__", None) is not None:

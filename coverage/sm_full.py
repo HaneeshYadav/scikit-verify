@@ -14,7 +14,7 @@ yr = Xr @ beta + 0.15 * rng.standard_normal(n)
 resid = yr - Xr @ np.linalg.lstsq(Xr, yr, rcond=None)[0]
 pos = np.abs(yr) + 0.5
 cnt = rng.poisson(3.0, n).astype(float)
-binv = (yr > yr.mean()).astype(float)
+binv = (yr + 0.4 * rng.standard_normal(n) > yr.mean()).astype(float)  # not separable
 w = rng.uniform(0.5, 2.0, n)
 ser = np.sin(np.arange(30.0) / 3) + 0.1 * rng.standard_normal(30)
 

@@ -68,6 +68,10 @@ CONCRETE_BY_NAME = {
     "intersect1d",
     "isin",
     "unique",
+    "unique_values",
+    "unique_counts",
+    "unique_all",
+    "unique_inverse",
     # sparse construction of index/indicator structure is bookkeeping
     # (data-as-address); compiled scipy silently garbles traced
     # indices, so the whole construction runs on values
@@ -77,6 +81,9 @@ CONCRETE_BY_NAME = {
     "csr_array",
     "csc_array",
     "coo_array",
+    # label-kind classification is bookkeeping about the target, not
+    # math (the labels doctrine)
+    "type_of_target",
 }
 # compiled routines that RETURN through array out-parameters (scipy's
 # Cython convention); value = argument positions of the out arrays
