@@ -535,7 +535,15 @@ class Pair:
                 index_map[sym] = sympy.Integer(entry)
         value = self.value[key]
         if isinstance(value, np.ndarray):
-            value = value.copy()  # slices are value-semantic: no view aliasing
+            # slices COPY, deliberately unlike numpy. Shared buffers
+            # were tried (2026-08-21): a parent write after slicing
+            # then updates the view's values while its formula stays a
+            # snapshot -- two-lane divergence, caught by the
+            # value-semantic pin. Aliasing needs child notification;
+            # until that session, copies keep the lanes honest and
+            # the neutrality check refuses the library idioms that
+            # need true aliasing (scale's Xr -= mean_).
+            value = value.copy()
         result = self._remap(
             value=value,  # raw key: numpy interprets it independently
             index_map=index_map,
@@ -975,14 +983,12 @@ class Pair:
     def __rdivmod__(self, other):
         return (other // self, other % self)
 
-    # NOTE: in-place dunders (__iadd__ etc. routed through
-    # self[...] = self + other) were tried on 2026-08-21 to keep
-    # sklearn's Xr -= mean_ aliasing alive. They fixed the aliasing
-    # direction but regressed Ridge and the predict paths with wrong
-    # VALUES: full-overwrite setitem composes incorrectly with some
-    # view shape. The aliasing design needs its own session; until
-    # then Python's default rebind (correct values, broken aliasing,
-    # caught loudly by the neutrality check) is the honest state.
+    # NOTE: in-place dunders routed through self[...] = self + other
+    # were tried twice on 2026-08-21 (with copied and with shared
+    # slice buffers). Both times they regressed the linear-model
+    # predict paths with wrong values: full-overwrite setitem and the
+    # write-through composition disagree somewhere. Minimal repro in
+    # coverage/scale_min.py; the aliasing session owns this.
 
     def __round__(self, ndigits=None):
         # exact except at half-way ties, where Python rounds to even
