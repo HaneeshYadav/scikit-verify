@@ -582,10 +582,23 @@ FUNCTION_TABLE[np.gradient] = _gradient
 
 
 def _linspace(start, stop, num=50, endpoint=True, retstep=False, **kwargs):
-    if kwargs or retstep or not (
-        isinstance(start, Pair) or isinstance(stop, Pair)
-    ):
-        raise NotImplementedError("linspace: traced endpoints only")
+    if not (isinstance(start, Pair) or isinstance(stop, Pair)):
+        # nothing traced: numpy's own linspace, untouched
+        return np.linspace(
+            Pair._value_of(start),
+            Pair._value_of(stop),
+            int(num),
+            endpoint=endpoint,
+            retstep=retstep,
+            **kwargs,
+        )
+    kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if not (v is None or (k == "axis" and v == 0))
+    }
+    if kwargs or retstep:
+        raise NotImplementedError("linspace: retstep/kwargs not supported")
     if np.size(Pair._value_of(start)) != 1 or np.size(Pair._value_of(stop)) != 1:
         raise NotImplementedError("linspace: scalar endpoints only")
     num = int(num)
