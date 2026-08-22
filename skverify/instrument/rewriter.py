@@ -169,6 +169,17 @@ class _Rewriter(ast.NodeTransformer):
             return func.id
         return None
 
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        if node.attr == "__class__" and isinstance(node.ctx, ast.Load):
+            # class-keyed dispatch: a Pair answers as its value's class
+            return ast.Call(
+                func=ast.Name(id="__skv_classof__", ctx=ast.Load()),
+                args=[node.value],
+                keywords=[],
+            )
+        return node
+
     def visit_Call(self, node):
         self.generic_visit(node)
         # a neutral function passed by REFERENCE (map(np.asarray_chkfinite,
@@ -281,7 +292,9 @@ class _Rewriter(ast.NodeTransformer):
         elif isinstance(node.func, ast.Name):
             self.callees.add(node.func.id)
             node = self._maybe_opaque(node)
-        elif isinstance(node.func, ast.Attribute):
+        else:
+            # computed callees too -- factory()(x), table[k](x) -- or
+            # the returned callable runs with no doorman at all
             node = self._maybe_opaque(node)
         return node
 

@@ -24,6 +24,7 @@ from .runtime import (
     _skv_dict,
     _skv_cmp,
     _skv_clip,
+    _skv_classof,
     _skv_float,
     _skv_getitem,
     _skv_set,
@@ -165,6 +166,7 @@ def _instrument(fn, depth, seen, extra=None):
     namespace["__skv_cmp__"] = _skv_cmp
     namespace["__skv_float__"] = _skv_float
     namespace["__skv_clip__"] = _skv_clip
+    namespace["__skv_classof__"] = _skv_classof
     namespace["__skv_concrete_call__"] = _skv_concrete_call
     namespace["__skv_opaque_out__"] = _skv_opaque_out
     namespace["__skv_loop_iter__"] = _loop_iter
@@ -444,7 +446,18 @@ def _instrument_class(C, depth, seen):
         return C, ()
     for cell in rebind:
         cell.cell_contents = twin
+    # explicit ancestor references -- super(Base, self) and direct
+    # Base.__init__(self, ...) calls -- resolve by NAME in the method's
+    # namespace; left alone they name the raw class, whose presence in
+    # the twin's MRO (the isinstance keystone) would route the rest of
+    # the chain through uninstrumented code
+    ancestors = {C.__name__: twin}
+    for anc in C.__mro__[1:]:
+        hit = _CLASS_TWINS.get(anc)
+        if hit and hit[0] is not anc:
+            ancestors[anc.__name__] = hit[0]
     for ns in patch_namespaces:
         ns["__skv_class__"] = twin
+        ns.update(ancestors)
     _CLASS_TWINS[C] = (twin, tuple(sites))
     return twin, tuple(sites)

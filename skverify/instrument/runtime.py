@@ -132,7 +132,18 @@ def _skv_method(name, obj, *args, **kwargs):
             and not any(isinstance(e, Pair) for e in obj.ravel())
         ):
             obj = Pair._numeric(obj, copy=False)
-        return getattr(obj, name)(*args, **kwargs)
+        bound = getattr(obj, name)
+        from .triage import _skv_maybe, _traced
+
+        if callable(bound) and (
+            any(_traced(a) for a in args)
+            or any(_traced(v) for v in kwargs.values())
+        ):
+            # a foreign object's method receiving TRACED data: triage
+            # it like any other call instead of running it raw -- the
+            # raw body would hit the traced values with no doorman
+            return _skv_maybe(bound)(*args, **kwargs)
+        return bound(*args, **kwargs)
     if name == "view":
         dtype = args[0] if args else kwargs.get("dtype")
         if dtype is not None and np.dtype(dtype).kind not in "f":
@@ -427,6 +438,15 @@ def _skv_dict(mapping):
 
         return TracedDict(items)
     return items
+
+
+def _skv_classof(x):
+    # the .__class__ face of the isinstance rule: class-keyed dispatch
+    # tables (INTERFACES[x.__class__]) must route a Pair the same way
+    # isinstance gates do
+    if isinstance(x, Pair):
+        return np.ndarray if isinstance(x.value, np.ndarray) else type(x.value)
+    return x.__class__
 
 
 def _skv_isinstance(obj, types):
