@@ -537,21 +537,73 @@ def _empty_like(a, dtype=None, **kwargs):
 
 
 def _gradient(f, *varargs, axis=None, edge_order=1):
-    if not isinstance(f, Pair) or len(f._axis_bounds) != 1:
-        raise NotImplementedError("gradient: 1-D traced input only")
-    if axis not in (None, 0, -1) or edge_order != 1:
-        raise NotImplementedError("gradient: axis/edge_order not supported")
-    if len(varargs) > 1 or (varargs and not np.isscalar(Pair._value_of(varargs[0]))):
+    if not isinstance(f, Pair):
+        raise NotImplementedError("gradient: traced input only")
+    if edge_order != 1:
+        raise NotImplementedError("gradient: edge_order 2 not supported")
+    nd = len(f._axis_bounds)
+    if varargs and any(
+        not np.isscalar(Pair._value_of(v)) for v in varargs
+    ):
         raise NotImplementedError("gradient: uniform scalar spacing only")
-    dx = varargs[0] if varargs else 1.0
-    out = np.zeros_like(f)
-    out[1:-1] = (f[2:] - f[:-2]) / (2.0 * dx)
-    out[0] = (f[1] - f[0]) / dx
-    out[-1] = (f[-1] - f[-2]) / dx
-    return out
+    if len(varargs) == 0:
+        spacing = [1.0] * nd
+    elif len(varargs) == 1:
+        spacing = [varargs[0]] * nd
+    elif len(varargs) == nd:
+        spacing = list(varargs)
+    else:
+        raise NotImplementedError("gradient: spacing arity mismatch")
+    axes = list(range(nd)) if axis is None else [
+        (axis + nd) % nd if np.isscalar(axis) else None
+    ]
+    if axes[0] is None:
+        raise NotImplementedError("gradient: axis tuples not supported")
+
+    def along(ax, dx):
+        def key(s):
+            return tuple(
+                s if d == ax else slice(None) for d in range(nd)
+            )
+
+        out = np.zeros_like(f)
+        out[key(slice(1, -1))] = (
+            f[key(slice(2, None))] - f[key(slice(None, -2))]
+        ) / (2.0 * dx)
+        out[key(0)] = (f[key(1)] - f[key(0)]) / dx
+        out[key(-1)] = (f[key(-1)] - f[key(-2)]) / dx
+        return out
+
+    outs = [along(ax, spacing[ax]) for ax in axes]
+    return outs[0] if len(outs) == 1 else outs
 
 
 FUNCTION_TABLE[np.gradient] = _gradient
+
+
+def _linspace(start, stop, num=50, endpoint=True, retstep=False, **kwargs):
+    if kwargs or retstep or not (
+        isinstance(start, Pair) or isinstance(stop, Pair)
+    ):
+        raise NotImplementedError("linspace: traced endpoints only")
+    if np.size(Pair._value_of(start)) != 1 or np.size(Pair._value_of(stop)) != 1:
+        raise NotImplementedError("linspace: scalar endpoints only")
+    num = int(num)
+    lo, hi = Pair._formula_of(start), Pair._formula_of(stop)
+    n_steps = (num - 1) if endpoint else num
+    i = axis_idx(0)
+    formula = lo + i * (hi - lo) / sympy.Integer(max(n_steps, 1))
+    value = np.linspace(
+        float(np.asarray(Pair._value_of(start)).ravel()[0]),
+        float(np.asarray(Pair._value_of(stop)).ravel()[0]),
+        num,
+        endpoint=endpoint,
+    )
+    steps = tuple(p for p in (start, stop) if isinstance(p, Pair))
+    return Pair(value, formula, ((0, num),), steps=steps)
+
+
+FUNCTION_TABLE[np.linspace] = _linspace
 
 
 def _ascontiguousarray(a, dtype=None, **kwargs):

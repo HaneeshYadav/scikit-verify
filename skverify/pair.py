@@ -461,6 +461,10 @@ class Pair:
         u (4x7) + v (7):  u[i, j] + v[j],  bounds ((0, 4), (0, 7))
         bridge=False (mask algebra, comparisons) keeps Booleans raw.
         """
+        if isinstance(a, (list, tuple)):
+            a = np.asarray(a)  # numpy coerces sequence operands
+        if isinstance(b, (list, tuple)):
+            b = np.asarray(b)
         bounds_a, bounds_b = Pair._domain_of(a), Pair._domain_of(b)
         merged = Pair._merge_domains(bounds_a, bounds_b)
         formula_a = Pair._formula_of(a)
@@ -1279,6 +1283,16 @@ class Pair:
 
     def dot(self, other):
         return np.dot(self, other)
+
+    def argsort(self, axis=-1, kind=None, order=None):
+        # index positions are trace facts: same route as np.argsort
+        return np.argsort(self, axis=axis)
+
+    def argmax(self, axis=None):
+        return np.argmax(self, axis=axis)
+
+    def argmin(self, axis=None):
+        return np.argmin(self, axis=axis)
 
     @property
     def base(self):

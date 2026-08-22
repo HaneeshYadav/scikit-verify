@@ -1,15 +1,12 @@
-TOTAL 38 | LIFT+match 26 | lift-unverified 0 | refused 12 | died 0
+TOTAL 38 | LIFT+match 29 | lift-unverified 0 | refused 9 | died 0
 
-LIFT+match: sum_squares, norm1, norm2, norm_inf, pnorm_3, abs_sum, square_sum, sqrt_sum, power_sum, pos_sum, neg_sum, maximum_elem, max, min, logistic_sum, entr_sum, kl_div_sum, rel_entr_sum, log_sum_exp, geo_mean, harmonic_mean, huber_sum, trace, sigma_max, tv_1d, residual_norm
+LIFT+match: sum_squares, norm1, norm2, norm_inf, pnorm_3, abs_sum, square_sum, sqrt_sum, power_sum, pos_sum, neg_sum, maximum_elem, max, min, logistic_sum, entr_sum, kl_div_sum, rel_entr_sum, log_sum_exp, geo_mean, harmonic_mean, huber_sum, trace, lambda_max, lambda_min, sigma_max, log_det, tv_1d, residual_norm
 
 REFUSED:
   quad_form                    [skverify] could not lift this call (ValueEr
   quad_over_lin                [skverify] could not lift this call (Attribu
   matrix_frac                  [skverify] could not lift this call (ValueEr
-  lambda_max                   [skverify] could not lift this call (Attribu
-  lambda_min                   [skverify] could not lift this call (Attribu
   normNuc                      np.sum kwargs ['initial'] not supported
-  log_det                      ufunc slogdet has 2 outputs
   solve_lstsq                  [skverify] could not lift this call (ValueEr
   solve_ridge                  [skverify] could not lift this call (ValueEr
   solve_lasso                  [skverify] could not lift this call (ValueEr
