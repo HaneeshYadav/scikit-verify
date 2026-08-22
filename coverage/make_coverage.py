@@ -10,9 +10,13 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 LIBS = [
-    ("NumPy / SciPy", "scipy_full.out"),
+    ("NumPy dialect (every public callable)", "numpy_dialect.out"),
+    ("NumPy (common-use battery)", "numpy_full.out"),
+    ("SciPy", "scipy_full.out"),
     ("scikit-learn", "skl_full.out"),
     ("statsmodels", "sm_full.out"),
+    ("cvxpy", "cvxpy_full.out"),
+    ("Wild research code (random GitHub sample)", "wild_100.out"),
 ]
 
 def parse(path):
@@ -21,8 +25,12 @@ def parse(path):
     m = re.search(r"^LIFT[^:]*: (.*)$", text, re.M)
     if m:
         lifted = [x.strip() for x in m.group(1).split(",") if x.strip()]
-    refused = re.findall(r"^\s{2,}(\S+)\s+\|", text[text.find("REFUSED"):text.find("DIED")], re.M) if "REFUSED" in text else []
-    died = re.findall(r"^\s{2,}(\S+)\s+\|", text[text.find("DIED"):], re.M) if "DIED" in text else []
+    ref_block = text[text.find("REFUSED"):text.find("DIED")] if "REFUSED" in text else ""
+    died_block = text[text.find("DIED"):text.find("UNCALLABLE")] if "UNCALLABLE" in text else (text[text.find("DIED"):] if "DIED" in text else "")
+    refused = re.findall(r"^\s{2,}(\S+)", ref_block, re.M)
+    died = re.findall(r"^\s{2,}(\S+)", died_block, re.M)
+    refused = [x.rstrip("|") for x in refused if x != "|"]
+    died = [x.rstrip("|") for x in died if x != "|"]
     return lifted, refused, died
 
 out = [

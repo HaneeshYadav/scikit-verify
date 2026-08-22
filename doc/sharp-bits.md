@@ -29,11 +29,12 @@ Formatting a traced value into a string (`f"{x:.2f}"`,
 
 ## 3. Writes into numeric buffers
 
-Assigning traced values into a preallocated float array
-(`out=`, `np.empty(...); buf[i] = traced`) would silently drop
-formulas, so it refuses. Writes into object arrays, `np.zeros`-style
-allocations made inside traced code, and ordinary assignment all work
--- the tracer rewrites them to keep both lanes.
+Assigning traced values into a float buffer the tracer has never
+seen (one passed in from outside, or built by a library before your
+data arrived) would silently drop formulas, so it refuses. Writes into
+allocations made inside traced code (`np.zeros`, `np.empty`, `np.eye`),
+`out=` into traced targets, and ordinary assignment all work -- the
+tracer rewrites them to keep both lanes.
 
 *Instead:* build results functionally, or let the traced allocation
 handle it (it usually does without any change to your code).
@@ -61,10 +62,12 @@ you actually took in an `if`.
 
 ## Compiled code becomes named atoms
 
-LAPACK, Cython, and f2py routines cannot be entered. Each call is
-sealed as a named term (`svd_S`, `solve_banded_0`) with its defining
-call recorded and, where a contract exists, checked against its own
-mathematics on this very call (`A @ x == b`, reconstruction, ...).
+LAPACK, FFT, Cython, and f2py routines cannot be entered. Each call
+is sealed as a named term (`svd_S`, `fft_0`) with its defining call
+recorded and, where a contract exists, checked against its defining
+equation on this very call: `solve` against `A @ x == b`, `svd`
+against `U diag(S) Vh == A` with orthonormality, `fft` against the
+DFT sum evaluated naively, `lstsq` against the normal equations.
 This is not a refusal -- it is the honest boundary, disclosed in
 `.unchecked`.
 
