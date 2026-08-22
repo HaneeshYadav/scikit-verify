@@ -7,7 +7,7 @@ out-parameters. ``skverify.dialect`` is the public API for extending
 these.
 """
 
-ALLOC = {"zeros", "empty", "ones", "full"}
+ALLOC = {"zeros", "empty", "ones", "full", "eye", "identity"}
 NEUTRAL = {
     "asarray",
     "asanyarray",

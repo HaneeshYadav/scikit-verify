@@ -39,6 +39,21 @@ def _skv_ones(shape, dtype=None, *args, **kwargs):
     return Pair(np.ones(shape, dtype=dtype), sympy.Integer(1), _bounds_of(shape))
 
 
+def _skv_eye(N, M=None, k=0, dtype=None, *args, **kwargs):
+    # the Kronecker delta, stated as itself: 1 where i = j - k
+    from ..helpers import axis_idx
+
+    value = np.eye(N, M, k, dtype=dtype)
+    formula = sympy.Piecewise(
+        (1, sympy.Eq(axis_idx(0), axis_idx(1) - int(k))), (0, True)
+    )
+    return Pair(value, formula, _bounds_of(value.shape))
+
+
+def _skv_identity(n, dtype=None, *args, **kwargs):
+    return _skv_eye(n, dtype=dtype)
+
+
 def _skv_full(shape, fill_value, dtype=None, *args, **kwargs):
     # parameter names mirror np.full: callers pass fill_value by keyword
     if not isinstance(fill_value, Pair):

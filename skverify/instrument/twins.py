@@ -35,6 +35,8 @@ from .runtime import (
     _skv_empty,
     _skv_finfo,
     _skv_full,
+    _skv_eye,
+    _skv_identity,
     _skv_isinstance,
     _skv_method,
     _skv_namespace,
@@ -151,6 +153,8 @@ def _instrument(fn, depth, seen, extra=None):
     namespace["__skv_empty__"] = _skv_empty
     namespace["__skv_ones__"] = _skv_ones
     namespace["__skv_full__"] = _skv_full
+    namespace["__skv_eye__"] = _skv_eye
+    namespace["__skv_identity__"] = _skv_identity
     namespace["__skv_neutral__"] = _skv_neutral
     namespace["__skv_opaque__"] = _skv_opaque
     namespace["__skv_method__"] = _skv_method

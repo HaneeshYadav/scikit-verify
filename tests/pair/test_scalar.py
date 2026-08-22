@@ -93,13 +93,25 @@ class TestScalarProperties:
 
 
 class TestRefusals:
-    def test_bool_refuses(self):
-        x, _ = make()
-        with pytest.raises(NotImplementedError):
-            bool(x)
+    def test_bool_records_nonzero_guard(self):
+        import sympy
 
-    def test_bool_refuses_in_if(self):
+        from skverify.pair import _GUARDS
+
         x, _ = make()
-        with pytest.raises(NotImplementedError):
-            if x:  # How it will be used.
-                pass
+        before = len(_GUARDS)
+        assert bool(x) is bool(float(x.value))
+        assert len(_GUARDS) == before + 1
+        assert _GUARDS[-1] in (
+            sympy.Ne(x.formula, 0),
+            sympy.Not(sympy.Ne(x.formula, 0)),
+        )
+
+    def test_bool_guard_in_if(self):
+        from skverify.pair import _GUARDS
+
+        x, _ = make()
+        before = len(_GUARDS)
+        if x:  # How it will be used.
+            pass
+        assert len(_GUARDS) == before + 1

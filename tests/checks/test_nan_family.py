@@ -51,3 +51,25 @@ def test_digitize_indices_are_concrete_facts():
     out = to_sympy(gather, V[np.isfinite(V)].copy())
     ref = gather(V[np.isfinite(V)])
     assert np.isclose(float(out.value), ref)
+
+
+def test_eye_allocates_traced_and_scatter_lands():
+    def h(x):
+        A = np.eye(3)
+        A[0, 2] = x[0]
+        return A
+
+    ref = h(np.array([5.0, 1.0]))
+    out = to_sympy(h, np.array([5.0, 1.0]))
+    got = np.asarray(out.value if isinstance(out, Pair) else out, dtype=float)
+    assert np.allclose(got, ref)
+
+
+def test_truthy_flag_branch_records_guard():
+    def g(x, flag):
+        if flag:
+            return x.sum() * 2.0
+        return x.sum()
+
+    out = to_sympy(g, np.array([1.0, 2.0]), np.float64(1.0))
+    assert "Ne(flag, 0)" in str(out.preconditions)

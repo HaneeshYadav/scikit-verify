@@ -1057,8 +1057,15 @@ class Pair:
             outcome = bool(np.asarray(self.value).ravel()[0])
             _GUARDS.append(self.formula if outcome else sympy.Not(self.formula))
             return outcome
+        if np.size(self.value) == 1:
+            # plain truthiness of a traced NUMBER (if flag:) IS a
+            # comparison -- Python defines it as x != 0. Same branch
+            # capture, guard spelled explicitly
+            outcome = bool(np.asarray(self.value).ravel()[0])
+            cond = sympy.Ne(self.formula, 0)
+            _GUARDS.append(cond if outcome else sympy.Not(cond))
+            return outcome
         # arrays: ambiguous, like numpy's own error -- use .all()/.any().
-        # non-conditions: silent truthiness on math is never meaningful.
         raise NotImplementedError(
             "data-dependent branch on a traced value; "
             "for masks use .all()/.any(), for combining use & | ~"

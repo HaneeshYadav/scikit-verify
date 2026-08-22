@@ -17,7 +17,7 @@ import numpy as np
 
 from ..pair import Pair
 from ..session import current as _session
-from .registries import CONCRETE_BY_NAME, OPAQUE_CALLABLES
+from .registries import CONCRETE_BY_NAME, NEUTRAL, OPAQUE_CALLABLES
 
 # ndarray methods whose signature matches their np.* function: only
 # these may route a decompressed array through the function's entry
@@ -51,9 +51,16 @@ def runtime_twin(fn):
 
 def _twinnable(fn):
     # stdlib code is never mathematics; re-exec also breaks its
-    # name-mangled privates (__marker) and C-adjacent idioms
+    # name-mangled privates (__marker) and C-adjacent idioms. numpy is
+    # VOCABULARY, not user code: its meanings live in the registries
+    # and the dispatch protocol, and twinning its buffer-trick bodies
+    # (eye's strided flat write) walks straight into aliasing walls
     mod = (getattr(fn, "__module__", "") or "").split(".")[0]
-    return mod not in sys.stdlib_module_names and mod not in ("builtins", "skverify")
+    return mod not in sys.stdlib_module_names and mod not in (
+        "builtins",
+        "skverify",
+        "numpy",
+    )
 
 
 def _skv_maybe(fn):
@@ -64,6 +71,16 @@ def _skv_maybe(fn):
     cannot dodge them."""
     if getattr(fn, "__name__", None) in OPAQUE_CALLABLES:
         return _skv_opaque(fn)
+    if (
+        getattr(fn, "__name__", None) in NEUTRAL
+        and (getattr(fn, "__module__", "") or "").split(".")[0] == "numpy"
+    ):
+        # the asarray family reached by REFERENCE (toarray = np.asarray;
+        # toarray(a)): neutral by resolved identity, not spelling --
+        # numpy bodies are never twinned, so this is the only doorman
+        from .runtime import _skv_neutral
+
+        return _skv_neutral
     if getattr(fn, "__name__", None) in CONCRETE_BY_NAME:
         # inventory routines run on concrete values: their results are
         # facts about this trace, and their bodies (sorting, boolean
