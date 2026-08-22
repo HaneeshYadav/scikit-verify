@@ -273,6 +273,23 @@ def _sum_plain(a, axis=None, **kwargs):
     kwargs = {
         k: v for k, v in kwargs.items() if v is not np._NoValue
     }
+    out = kwargs.pop("out", None)
+    if out is not None:
+        r = _sum_plain(a, axis=axis, **kwargs)
+        if isinstance(out, tuple):
+            out = out[0]
+        if isinstance(out, Pair):
+            if isinstance(out.value, np.ndarray):
+                out.value[...] = Pair._value_of(r)
+            else:
+                out.value = Pair._value_of(r)
+            out.formula = Pair._formula_of(r)
+            out._axis_bounds = getattr(r, "_axis_bounds", None)
+            return out
+        raise NotImplementedError(
+            "reduction with out= into an untraced buffer: later reads "
+            "of the buffer would silently lose the formula"
+        )
     where = kwargs.pop("where", True)
     if where is not True:
         # a masked sum IS the sum of the masked selection, exactly

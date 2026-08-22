@@ -1695,6 +1695,32 @@ class Pair:
                     for idx, e in enumerate(np.ravel(r)):
                         dst.ravel()[idx] = e
                 return dst
+            if (
+                method == "__call__"
+                and len(out) == 1
+                and isinstance(out[0], Pair)
+                and getattr(out[0], "_slice_of", None) is None
+            ):
+                # whole-Pair destinations only: our slice views hold
+                # VALUE COPIES, so an in-place write would not reach
+                # the parent and the parent's lanes would silently
+                # diverge (chi2's accumulator taught this)
+                # tanh(K, out=K): the destination is itself traced, so
+                # both lanes rebind. The value lane writes IN PLACE so
+                # external aliases of the buffer stay coherent.
+                r = self.__array_ufunc__(ufunc, method, *inputs, **kwargs)
+                if r is NotImplemented or not isinstance(r, Pair):
+                    return r
+                dst = out[0]
+                if isinstance(dst.value, np.ndarray):
+                    dst.value[...] = r.value
+                else:
+                    dst.value = r.value
+                prior = dst.formula
+                dst.formula = r.formula
+                dst._axis_bounds = r._axis_bounds
+                dst._record_write(prior, r)
+                return dst
             raise NotImplementedError("out= is not supported (mutation)")
         if method == "reduce" and ufunc in (np.maximum, np.minimum, np.add):
             a = inputs[0]
