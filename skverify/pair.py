@@ -1923,6 +1923,20 @@ class Pair:
         target = UFUNC_TABLE.get(ufunc)
         if target is None:
             if ufunc.nout != 1:
+                # two-output ufuncs with direct sympy forms compose
+                # from single-output pieces
+                if ufunc is np.modf and not kwargs:
+                    from .maps.numpy import _modf
+
+                    return _modf(*inputs)
+                if ufunc is np.divmod and not kwargs:
+                    from .maps.numpy import _divmod_entry
+
+                    return _divmod_entry(*inputs)
+                if ufunc is np.frexp and not kwargs:
+                    from .maps.numpy import _frexp
+
+                    return _frexp(*inputs)
                 raise NotImplementedError(
                     f"ufunc {ufunc.__name__} has {ufunc.nout} outputs"
                 )

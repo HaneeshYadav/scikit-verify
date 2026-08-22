@@ -58,9 +58,11 @@ def test_differential_whole_table(np_fn, sp_fn):
 
 
 class TestRefusals:
-    def test_unmapped_ufunc(self):
-        with pytest.raises(NotImplementedError):
-            np.frexp(make())
+    def test_frexp_composes_from_exact_pieces(self):
+        x = make()
+        m, e = np.frexp(x)
+        got = np.asarray(m.value, dtype=float) * 2.0 ** np.asarray(e.value, dtype=float)
+        assert np.allclose(got, np.asarray(x.value, dtype=float))
 
     def test_add_reduce_is_sum(self):
         r = np.add.reduce(make())

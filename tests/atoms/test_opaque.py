@@ -72,10 +72,12 @@ class TestOpaqueCalls:
         U = sympy.IndexedBase("u")
         assert float(r.formula.subs(i, 1).subs(U[1], 8.0)) == 2.0
 
-    def test_multi_output_ufunc_still_refuses(self):
+    def test_multi_output_ufunc_frexp_lifts_exact(self):
         u = Pair.array("u", np.array([1.0, 4.0]))
-        with pytest.raises(NotImplementedError):
-            np.frexp(u)
+        m, e = np.frexp(u)
+        rm, re_ = np.frexp(np.array([1.0, 4.0]))
+        assert np.allclose(np.asarray(m.value, dtype=float), rm)
+        assert np.allclose(np.asarray(e.value, dtype=float), re_)
 
 
 class TestContractChecks:

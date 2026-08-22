@@ -115,6 +115,105 @@ def _solve_residual(args, result):
     return OK if np.linalg.norm(r) / scale < 1e-8 else FAILED
 
 
+def _orthonormal_cols(m, tol=1e-8):
+    m = np.asarray(m)
+    k = m.shape[1]
+    return OK if np.allclose(m.conj().T @ m, np.eye(k), atol=tol) else FAILED
+
+
+def _svd_residual(args, result):
+    a = np.asarray(args[0])
+    if not (isinstance(result, tuple) and len(result) >= 3):
+        return UNKNOWN
+    u, s, vh = (np.asarray(x) for x in result[:3])
+    k = len(s)
+    recon = (u[:, :k] * s) @ vh[:k, :]
+    if not np.allclose(recon, a, atol=1e-8 * max(1.0, np.abs(a).max())):
+        return FAILED
+    if _orthonormal_cols(u[:, :k]) != OK:
+        return FAILED
+    return _orthonormal_cols(vh[:k, :].conj().T)
+
+
+def _qr_residual(args, result):
+    a = np.asarray(args[0])
+    if not (isinstance(result, tuple) and len(result) >= 2):
+        return UNKNOWN
+    q, r = np.asarray(result[0]), np.asarray(result[1])
+    if not np.allclose(q @ r, a, atol=1e-8 * max(1.0, np.abs(a).max())):
+        return FAILED
+    return _orthonormal_cols(q)
+
+
+def _cholesky_residual(args, result):
+    a = np.asarray(args[0])
+    ell = np.asarray(result)
+    if ell.ndim != 2:
+        return UNKNOWN
+    recon = ell @ ell.conj().T
+    if np.allclose(recon, a, atol=1e-8 * max(1.0, np.abs(a).max())):
+        return OK
+    # numpy also offers upper=True
+    recon = ell.conj().T @ ell
+    return OK if np.allclose(recon, a, atol=1e-8 * max(1.0, np.abs(a).max())) else FAILED
+
+
+def _lstsq_residual(args, result):
+    # the normal equations: A^T A x == A^T b (holds for ANY least
+    # squares solution, full rank or not)
+    a, b = np.asarray(args[0]), np.asarray(args[1])
+    x = np.asarray(result[0] if isinstance(result, tuple) else result)
+    lhs = a.T @ (a @ x)
+    rhs = a.T @ b
+    scale = max(1.0, np.abs(rhs).max())
+    return OK if np.allclose(lhs, rhs, atol=1e-7 * scale) else FAILED
+
+
+def _pinv_residual(args, result):
+    # Moore-Penrose condition 1: A X A == A (plus symmetry of A X)
+    a, x = np.asarray(args[0]), np.asarray(result)
+    if not np.allclose(a @ x @ a, a, atol=1e-8 * max(1.0, np.abs(a).max())):
+        return FAILED
+    ax = a @ x
+    return OK if np.allclose(ax, ax.conj().T, atol=1e-8) else FAILED
+
+
+def _dft_matrix(n, sign):
+    idx = np.arange(n)
+    return np.exp(sign * 2j * np.pi * np.outer(idx, idx) / n)
+
+
+def _fft_residual(args, result, sign=-1, real_in=False, inverse=False):
+    # the DEFINING equation, evaluated naively: an independent O(n^2)
+    # check of the compiled transform. 1-D, size-capped.
+    x = np.asarray(args[0])
+    if x.ndim != 1 or x.size > 2048:
+        return UNKNOWN
+    n = x.size
+    want = _dft_matrix(n, sign) @ x.astype(complex)
+    if inverse:
+        want = want / n
+    got = np.asarray(result)
+    if real_in:
+        want = want[: n // 2 + 1]
+    scale = max(1.0, np.abs(want).max())
+    return OK if np.allclose(got, want, atol=1e-8 * scale) else FAILED
+
+
+def _irfft_residual(args, result):
+    # round-trip against the definition: rfft of the output, naively
+    got = np.asarray(result)
+    if got.ndim != 1 or got.size > 2048:
+        return UNKNOWN
+    n = got.size
+    want_spec = (_dft_matrix(n, -1) @ got.astype(complex))[: n // 2 + 1]
+    spec = np.asarray(args[0])
+    if spec.shape != want_spec.shape:
+        return UNKNOWN
+    scale = max(1.0, np.abs(spec).max())
+    return OK if np.allclose(spec, want_spec, atol=1e-7 * scale) else FAILED
+
+
 CONTRACTS = {
     "solve": {
         "requires": [("square", _square)],
@@ -150,6 +249,56 @@ CONTRACTS = {
         "requires": [("symmetric", _symmetric)],
         "law": "A @ v == w * v",
         "residual": None,
+    },
+    "svd": {
+        "requires": [],
+        "law": "U diag(S) Vh == A, U and V orthonormal",
+        "residual": _svd_residual,
+    },
+    "qr": {
+        "requires": [],
+        "law": "Q @ R == A, Q orthonormal",
+        "residual": _qr_residual,
+    },
+    "cholesky": {
+        "requires": [("symmetric", _symmetric)],
+        "law": "L @ L.T == A",
+        "residual": _cholesky_residual,
+    },
+    "lstsq": {
+        "requires": [],
+        "law": "A.T A x == A.T b (normal equations)",
+        "residual": _lstsq_residual,
+    },
+    "_lstsq": {
+        "requires": [],
+        "law": "A.T A x == A.T b (normal equations)",
+        "residual": _lstsq_residual,
+    },
+    "pinv": {
+        "requires": [],
+        "law": "A X A == A and A X symmetric (Moore-Penrose)",
+        "residual": _pinv_residual,
+    },
+    "fft": {
+        "requires": [],
+        "law": "X[k] == sum_j x[j] exp(-2 pi i j k / n), checked naively",
+        "residual": lambda args, out: _fft_residual(args, out, sign=-1),
+    },
+    "ifft": {
+        "requires": [],
+        "law": "x[j] == (1/n) sum_k X[k] exp(+2 pi i j k / n), checked naively",
+        "residual": lambda args, out: _fft_residual(args, out, sign=+1, inverse=True),
+    },
+    "rfft": {
+        "requires": [],
+        "law": "the real-input DFT's first n//2+1 bins, checked naively",
+        "residual": lambda args, out: _fft_residual(args, out, sign=-1, real_in=True),
+    },
+    "irfft": {
+        "requires": [],
+        "law": "rfft(output) == input spectrum, checked naively",
+        "residual": _irfft_residual,
     },
     "inv": {
         "requires": [],

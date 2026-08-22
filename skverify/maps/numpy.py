@@ -244,6 +244,48 @@ def _masked_fuse(a):
     return prov
 
 
+def _prod(a, axis=None, **kwargs):
+    """np.prod as sympy.Product: Sum's multiplicative sibling."""
+    kwargs = {k: v for k, v in kwargs.items() if v is not np._NoValue}
+    if kwargs or axis is not None:
+        raise NotImplementedError("prod: kwargs/axis not supported yet")
+    if not isinstance(a, Pair):
+        if isinstance(a, np.ndarray) and a.dtype == object:
+            elems = list(a.ravel())
+            out = elems[0]
+            for e in elems[1:]:
+                out = out * e
+            return out
+        return np.prod(a)
+    if a._axis_bounds is None:
+        return a
+    if len(a._axis_bounds) != 1:
+        # flatten first: full products are order-free
+        return _prod(a.reshape(-1))
+    lo, hi = a._axis_bounds[0]
+    i0 = axis_idx(0)
+    j = _fresh_dummy(a.formula, 1)
+    return Pair(
+        np.prod(np.asarray(Pair._value_of(a.value), dtype=float)),
+        sympy.Product(a.formula.xreplace({i0: j}), (j, lo, hi - 1)),
+        None,
+        steps=(a,),
+    )
+
+
+def _clip_entry(a, a_min=None, a_max=None, **kwargs):
+    """np.clip is Max(lo, Min(x, hi)), exactly."""
+    kwargs = {k: v for k, v in kwargs.items() if v is not np._NoValue}
+    if kwargs:
+        raise NotImplementedError(f"clip kwargs {list(kwargs)} not supported")
+    out = a
+    if a_max is not None:
+        out = np.minimum(out, a_max)
+    if a_min is not None:
+        out = np.maximum(out, a_min)
+    return out
+
+
 def _sum(a, axis=None, **kwargs):
     prov = _masked_fuse(a) if isinstance(a, Pair) else None
     if prov is not None and axis is None:
@@ -888,6 +930,7 @@ def _round(a, decimals=0, **kwargs):
 
 
 FUNCTION_TABLE[np.round] = _round
+FUNCTION_TABLE[np.around] = _round
 def _average(a, axis=None, weights=None, returned=False, **kwargs):
     if returned:
         # (average, sum_of_weights): cov-style callers unpack both
@@ -1483,6 +1526,29 @@ FUNCTION_TABLE[np.allclose] = _concrete_check(np.allclose)
 FUNCTION_TABLE[np.isclose] = _concrete_check(np.isclose)
 
 FUNCTION_TABLE[np.sum] = _sum
+FUNCTION_TABLE[np.prod] = _prod
+FUNCTION_TABLE[np.clip] = _clip_entry
+
+
+def _modf(x, **kwargs):
+    # frac and whole parts: x - trunc(x), trunc(x)
+    whole = np.trunc(x)
+    return x - whole, whole
+
+
+def _divmod_entry(x, y, **kwargs):
+    return np.floor_divide(x, y), np.mod(x, y)
+
+
+def _frexp(x, **kwargs):
+    # x = m * 2**e with 0.5 <= |m| < 1: e = floor(log2|x|) + 1
+    e = np.floor(np.log2(np.abs(x))) + 1.0
+    return x / 2.0**e, e
+
+
+FUNCTION_TABLE[np.modf] = _modf
+FUNCTION_TABLE[np.divmod] = _divmod_entry
+FUNCTION_TABLE[np.frexp] = _frexp
 FUNCTION_TABLE[np.clip] = lambda a, lo, hi, **kw: _np_clip(a, lo, hi)
 FUNCTION_TABLE[np.all] = _all
 FUNCTION_TABLE[np.any] = _any

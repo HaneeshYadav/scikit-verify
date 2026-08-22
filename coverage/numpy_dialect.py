@@ -78,6 +78,9 @@ OUT_OF_SCOPE = {
                   "pad", "block", "print_function"},
 }
 OOS_LOOKUP = {n: cat for cat, names in OUT_OF_SCOPE.items() for n in names}
+# module names (fft, linalg, random) must not shadow FUNCTIONS of the
+# same name inside submodules: qualified names win
+OOS_QUALIFIED_EXEMPT = {"np.fft.fft", "np.fft.ifft", "np.linalg.solve"}
 # copyto/place/putmask/fill_diagonal are supported as MUTATORS of traced
 # targets; as standalone f(concrete) probes they are not formula-producing.
 # pad/delete/insert/append/block/resize are shape editors worth entries
@@ -166,7 +169,7 @@ def concrete(x):
 skipped = {}
 lift_ok, unverified, refused, died, uncallable = [], [], [], [], []
 for qual, name, f in public_callables():
-    if name in OOS_LOOKUP:
+    if name in OOS_LOOKUP and qual not in OOS_QUALIFIED_EXEMPT:
         skipped.setdefault(OOS_LOOKUP[name], []).append(qual)
         continue
     callname = qual.replace("np.linalg.", "np.linalg.").replace("np.fft.", "np.fft.")

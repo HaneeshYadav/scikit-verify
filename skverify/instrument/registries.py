@@ -59,6 +59,13 @@ OPAQUE_CALLABLES = {
     "ifft",
     "rfftn",
     "fftn",
+    "fft2",
+    "ifft2",
+    "ifftn",
+    "irfftn",
+    "irfft2",
+    "hfft",
+    "ihfft",
 }
 NEUTRAL_METHODS = {"toarray", "astype", "copy", "view", "type"}
 CONCRETE = {"isfinite", "isnan", "isinf"}  # validation checks, not math
