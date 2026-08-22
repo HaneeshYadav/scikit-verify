@@ -1104,7 +1104,24 @@ def _nan_reduce(np_fn, kind):
         total = keep[0]
         for e in keep[1:]:
             total = total + e
-        return total / len(keep) if kind == "mean" else total
+        if kind == "mean":
+            return total / len(keep)
+        if kind == "prod":
+            out = keep[0]
+            for e in keep[1:]:
+                out = out * e
+            return out
+        if kind in ("var", "std"):
+            ddof = kwargs.get("ddof", 0)
+            ddof = 0 if ddof is np._NoValue else ddof
+            k = len(keep)
+            mean = total / k
+            sq = (keep[0] - mean) ** 2
+            for e in keep[1:]:
+                sq = sq + (e - mean) ** 2
+            out = sq / (k - ddof)
+            return np.sqrt(out) if kind == "std" else out
+        return total
 
     return entry
 
@@ -1360,8 +1377,12 @@ FUNCTION_TABLE[np.putmask] = _mutating_write(np.putmask)
 FUNCTION_TABLE[np.nanmedian] = _nanmedian
 FUNCTION_TABLE[np.nanmean] = _nan_reduce(np.nanmean, "mean")
 FUNCTION_TABLE[np.nansum] = _nan_reduce(np.nansum, "sum")
+FUNCTION_TABLE[np.nanstd] = _nan_reduce(np.nanstd, "std")
+FUNCTION_TABLE[np.nanvar] = _nan_reduce(np.nanvar, "var")
+FUNCTION_TABLE[np.nanprod] = _nan_reduce(np.nanprod, "prod")
 FUNCTION_TABLE[np.searchsorted] = _searchsorted
 FUNCTION_TABLE[np.bincount] = _bincount
+FUNCTION_TABLE[np.digitize] = _concrete_inventory(np.digitize)
 FUNCTION_TABLE[np.isin] = _concrete_inventory(np.isin)
 FUNCTION_TABLE[np.setdiff1d] = _concrete_inventory(np.setdiff1d)
 FUNCTION_TABLE[np.union1d] = _concrete_inventory(np.union1d)
