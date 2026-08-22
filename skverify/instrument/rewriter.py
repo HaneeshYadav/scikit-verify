@@ -226,6 +226,11 @@ class _Rewriter(ast.NodeTransformer):
         elif name == "isinstance" and isinstance(node.func, ast.Name):
             self.sites.append("isinstance -> Pair counts as ndarray")
             node.func = ast.Name(id="__skv_isinstance__", ctx=ast.Load())
+        elif name == "isscalar":
+            # np.isscalar(pair) is False raw, so the two lanes take
+            # DIFFERENT branches; the predicate must answer for the value
+            self.sites.append("isscalar -> answers for the value")
+            node.func = ast.Name(id="__skv_isscalar__", ctx=ast.Load())
         elif name in SCALARIZE and isinstance(node.func, ast.Name):
             self.sites.append(f"{name} -> concrete scalar")
             node = ast.Call(

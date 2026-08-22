@@ -48,7 +48,10 @@ def to_sympy(fn, *args, **kwargs):
     try:
         with trace_rng():
             out = _repack(fn(*wrapped, **kw_wrapped))
-    except (NotImplementedError, ValueError, TypeError, AttributeError):
+    except Exception:
+        # ANY wall on the plain trace -- an assert taken differently, an
+        # index built from a Pair -- goes to the instrumented retry; the
+        # polite-failure contract downstream decides whose error it is
         # a wall the plain trace cannot pass; retry a semantically
         # identical instrumented copy (math-neutral calls replaced)
         fn_run, sites = instrument(fn)

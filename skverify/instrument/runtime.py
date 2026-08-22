@@ -440,6 +440,14 @@ def _skv_dict(mapping):
     return items
 
 
+def _skv_isscalar(x):
+    if isinstance(x, Pair):
+        return np.isscalar(x.value) or (
+            isinstance(x.value, np.generic) and x.value.ndim == 0
+        )
+    return np.isscalar(x)
+
+
 def _skv_classof(x):
     # the .__class__ face of the isinstance rule: class-keyed dispatch
     # tables (INTERFACES[x.__class__]) must route a Pair the same way

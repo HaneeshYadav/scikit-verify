@@ -25,6 +25,7 @@ from .runtime import (
     _skv_cmp,
     _skv_clip,
     _skv_classof,
+    _skv_isscalar,
     _skv_float,
     _skv_getitem,
     _skv_set,
@@ -167,6 +168,7 @@ def _instrument(fn, depth, seen, extra=None):
     namespace["__skv_float__"] = _skv_float
     namespace["__skv_clip__"] = _skv_clip
     namespace["__skv_classof__"] = _skv_classof
+    namespace["__skv_isscalar__"] = _skv_isscalar
     namespace["__skv_concrete_call__"] = _skv_concrete_call
     namespace["__skv_opaque_out__"] = _skv_opaque_out
     namespace["__skv_loop_iter__"] = _loop_iter
