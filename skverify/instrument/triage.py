@@ -149,6 +149,25 @@ def _skv_maybe(fn):
     if inspect.isbuiltin(fn) and not isinstance(
         getattr(fn, "__self__", None), (np.ndarray, Pair, type(np))
     ):
+        owner = getattr(fn, "__self__", None)
+        mod = (
+            fn.__module__
+            or (type(owner).__module__ if owner is not None else "")
+            or ""
+        ).split(".")[0]
+        name = getattr(fn, "__name__", "") or ""
+        if (
+            mod
+            and mod not in sys.stdlib_module_names
+            and mod not in ("builtins", "numpy")
+            and not (name.startswith("__") and name.endswith("__"))
+        ):
+            # dunders are object protocol (constructors set state,
+            # never return values), not mathematical routines
+            # compiled extension code (SWIG, C API): ANY non-Python
+            # call receiving traced data seals into an atom -- the
+            # mechanism is universal, not curated
+            return _skv_opaque(fn)
         # builtin METHODS (list.append, dict.get) have __module__ None
         # and must never opaque: they would swallow Pairs into values
         return fn

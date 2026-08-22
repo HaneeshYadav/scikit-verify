@@ -337,6 +337,27 @@ def _opaque_call_impl(Pair, func, args, kwargs):
         raise NotImplementedError(
             f"{func.__name__} mutated a traced input in place"
         )
+    if result is None:
+        fname_ = getattr(func, "__name__", "") or ""
+        if fname_.startswith("__") and fname_.endswith("__"):
+            # protocol dunders (a compiled __init__) return None by
+            # design and callers discard it: pass the None through,
+            # with the receipt on the record
+            _OPAQUE.append(
+                (
+                    fname_,
+                    (("state", "concrete"),),
+                    (fname_, "compiled protocol call received traced operands"),
+                )
+            )
+            return None
+        # a state-setter: no output to name means no atom -- and its
+        # effect lives in foreign internal state the trace cannot see
+        raise NotImplementedError(
+            f"{fname_ or 'a compiled call'} received "
+            "traced data but returns nothing; its effect is internal "
+            "state the trace cannot follow"
+        )
     formulas = []
     notes = []
     n_const = 0
