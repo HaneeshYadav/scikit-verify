@@ -132,6 +132,27 @@ def _rng_dist(name):
     return table[name]
 
 
+def _user_code_draw():
+    """True when the draw was requested by the user's own code. A
+    library drawing internally (initializers, import-time examples)
+    keeps plain numbers: that randomness is implementation detail,
+    not the user's noise model, and foreign code cannot digest
+    Pairs it never asked for."""
+    import sys
+
+    f = sys._getframe(2)
+    while f is not None:
+        mod = (f.f_globals.get("__name__", "") or "").split(".")[0]
+        if mod in ("skverify", "numpy"):
+            f = f.f_back
+            continue
+        fname = f.f_code.co_filename
+        return not (
+            "site-packages" in fname or fname.startswith(sys.base_prefix)
+        )
+    return False
+
+
 def rng_draw(fn, args, kwargs):
     """Seal one random draw as a distribution-tagged atom.
 
@@ -153,6 +174,8 @@ def rng_draw(fn, args, kwargs):
             **{k: value_of(v) for k, v in kwargs.items()},
         )
 
+    if not _user_code_draw():
+        return concrete()
     extra = set(kwargs) - {p for p, _ in spec} - {"size"}
     if extra or len(args) > len(spec) + 1:
         # dtype/out and exotic call shapes: draw concretely, as before
