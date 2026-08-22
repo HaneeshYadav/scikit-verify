@@ -1,0 +1,11 @@
+CANDIDATES 14 (plus 14 not callable on synthesized inputs)
+TOTAL 14 | LIFT+match 11 | lift-unverified 0 | refused 3 | died 0
+
+LIFT+match: AllenDowney_ModSimPy.has_nan, AllenDowney_ModSimPy.is_strictly_increasing, AppliedDataSciencePartners_WorldModels.compute_weight_decay, RobustFieldAutonomyLab_Distributional_RL_Navigation.wrap_to_pi, Waller-Lab_DiffuserCam-Tutorial.nextPow2, hardmaru_estool.compute_weight_decay, jilljenn_qna.E_Y, layer6ai-labs_HGCF.ndcg_func, sefibk_KernelGAN.rgb2gray, sefibk_KernelGAN.analytic_kernel, waggle-sensor_plugin-cmv-fftpc.vectorMagnitudeDirection
+
+REFUSED:
+  AppliedDataSciencePartners_WorldModels.compute_ranks [skverify] could not lift this call (AttributeError: 'Pa
+  Kai-46_SatelliteNeRF.depth_to_normal         gradient: 1-D traced input only
+  hardmaru_estool.compute_ranks                [skverify] could not lift this call (AttributeError: 'Pa
+
+DIED:
