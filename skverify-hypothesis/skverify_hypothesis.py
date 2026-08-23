@@ -37,7 +37,7 @@ def _guards(out):
     return list(pre.args) if isinstance(pre, sympy.And) else [pre]
 
 
-def explore(fn, like, max_examples=200, lo=-3.0, hi=3.0):
+def explore(fn, like, max_examples=200, lo=-3.0, hi=3.0, per_draw_seconds=15):
     """One witness per distinct certificate path.
 
     Draws inputs shaped like `like` (a tuple of example arguments),
@@ -45,36 +45,63 @@ def explore(fn, like, max_examples=200, lo=-3.0, hi=3.0):
     precondition signature. Returns [(args, certificate), ...].
     Refusals and errors are counted, never raised.
     """
-    strategies = [_like_strategy(a, lo, hi) for a in like]
+    import signal
+
+    rng = np.random.default_rng(0)
+
+    def draw_one(a):
+        if isinstance(a, np.ndarray):
+            return rng.uniform(lo, hi, a.shape)
+        return float(rng.uniform(lo, hi))
+
     seen, found, skipped = set(), [], 0
-
-    @st.composite
-    def draw_args(draw):
-        return tuple(draw(s) for s in strategies)
-
-    strat = draw_args()
     last_reason = None
-    for _ in range(max_examples):
-        args = strat.example()
-        try:
-            out = to_sympy(fn, *[np.copy(a) if isinstance(a, np.ndarray) else a
-                                 for a in args])
-        except Exception as e:
-            skipped += 1
-            last_reason = f"{type(e).__name__}: {str(e)[:120]}"
-            continue
-        sig = str(getattr(out, "preconditions", sympy.true))
-        if sig not in seen:
-            seen.add(sig)
-            found.append((args, out))
+    dry = 0
+
+    class _TO(Exception):
+        pass
+
+    old_handler = signal.signal(
+        signal.SIGALRM, lambda s_, f_: (_ for _ in ()).throw(_TO())
+    )
+    try:
+        for _ in range(max_examples):
+            if dry >= 25:
+                break  # 25 draws with nothing new: the paths have dried up
+            args = tuple(draw_one(a) for a in like)
+            signal.alarm(per_draw_seconds)
+            try:
+                out = to_sympy(fn, *[np.copy(a) if isinstance(a, np.ndarray)
+                                     else a for a in args])
+            except _TO:
+                skipped += 1
+                last_reason = f"trace exceeded {per_draw_seconds}s"
+                dry += 1
+                continue
+            except Exception as e:
+                skipped += 1
+                last_reason = f"{type(e).__name__}: {str(e)[:120]}"
+                dry += 1
+                continue
+            finally:
+                signal.alarm(0)
+            sig = str(getattr(out, "preconditions", sympy.true))
+            if sig not in seen:
+                seen.add(sig)
+                found.append((args, out))
+                dry = 0
+            else:
+                dry += 1
+    finally:
+        signal.signal(signal.SIGALRM, old_handler)
     if skipped:
         # silence hides problems: say what happened and why
-        print(f"[skverify-hypothesis] {skipped}/{max_examples} draws did "
+        print(f"[skverify-hypothesis] {skipped} draws did "
               f"not trace; last reason: {last_reason}")
     return found
 
 
-def edge_cases(fn, like, max_paths=20, lo=-3.0, hi=3.0):
+def edge_cases(fn, like, max_paths=20, lo=-3.0, hi=3.0, paths=None):
     """Inputs exactly ON precondition boundaries.
 
     For every guard discovered by explore(), solve its equality form
@@ -84,7 +111,8 @@ def edge_cases(fn, like, max_paths=20, lo=-3.0, hi=3.0):
     [(guard, args, outcome), ...] where outcome is the REAL
     function's behavior at the boundary (value or exception).
     """
-    paths = explore(fn, like, max_examples=max_paths * 10, lo=lo, hi=hi)
+    if paths is None:
+        paths = explore(fn, like, max_examples=max_paths * 10, lo=lo, hi=hi)
     param_names = [
         getattr(a, "name", None) for a in ()
     ]
