@@ -52,7 +52,7 @@ REFUSED:
   at-aaims_DataSiftML.compute_stream_function          gradient: edge_order 2 not supported
   dandrino_terrain-erosion-3-ways.normalize            coercion to dtype=float64 would discard the formula
   gregstarr_PyGPS.solveIter                            [skverify] could not lift this call (TO: ). Your code ru
-  inuritdino_HiguchiFractalDimension.interval_t        linspace: traced endpoints only
+  inuritdino_HiguchiFractalDimension.interval_t        astype to non-float would change the math
   ken-ouyang_neural_image_simulator.hsv2rgb            coercion to dtype=int32 would discard the formula
   yyccR_yolov5_in_tf2_keras.ap_per_class               [skverify] could not lift this call (ValueError: The tru
 

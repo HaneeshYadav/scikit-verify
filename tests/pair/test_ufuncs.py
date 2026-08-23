@@ -73,7 +73,10 @@ class TestRefusals:
         assert isinstance(r.formula, sympy.Max)
         assert float(r.value) == make().value.max()
 
-    def test_out_kwarg_refused(self):
+    def test_out_into_raw_buffer_writes_through(self):
         u = make()
-        with pytest.raises(NotImplementedError):
-            np.sin(u, out=np.empty(8))
+        buf = np.empty(np.shape(u.value))
+        r = np.sin(u, out=buf)
+        # the name gets the Pair; the buffer gets the values
+        assert hasattr(r, "formula")
+        assert np.allclose(buf, np.sin(np.asarray(u.value, dtype=float)))

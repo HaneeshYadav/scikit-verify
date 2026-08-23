@@ -84,7 +84,9 @@ def _skv_neutral(a, dtype=None, **kwargs):
         value = a.value
         if isinstance(value, np.ndarray) and value.dtype == object:
             value = Pair._value_of(value)  # value lane holding Pairs
-        value = np.ascontiguousarray(value, dtype=dtype)
+        # a REAL copy: with in-place ops supported, a shared buffer
+        # would let library-side mutation flow back into the original
+        value = np.array(value, dtype=dtype, order="C", copy=True)
         ndmin = kwargs.get("ndmin", 0)
         bounds = a._axis_bounds
         if ndmin and np.ndim(value) < ndmin:

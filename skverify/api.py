@@ -413,11 +413,23 @@ def _recompress(formulas):
         return None
     if len(formulas) < 2:
         return None
+    def _same(a, b):
+        # Boolean elements (per-element comparisons from a mask bag)
+        # have no subtraction; structural equality is their proof
+        if isinstance(a, sympy.logic.boolalg.Boolean) or isinstance(
+            b, sympy.logic.boolalg.Boolean
+        ):
+            return a == b
+        try:
+            return sympy.expand(a - b) == 0
+        except TypeError:
+            return a == b
+
     i = axis_idx(0)
     for stride in (1, 2, 3):
         candidate = _shift_indices(formulas[0], stride * i)
         if all(
-            sympy.expand(candidate.subs(i, k) - formulas[k]) == 0
+            _same(candidate.subs(i, k), formulas[k])
             for k in range(len(formulas))
         ):
             return candidate

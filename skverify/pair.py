@@ -515,7 +515,44 @@ class Pair:
                     f"index map {old_sym} -> {expr} is not affine"
                 )
         formula = self.formula.subs(index_map, simultaneous=True)
-        return Pair(value, formula, domain=axis_bounds or None, steps=(self,))
+        out = Pair(value, formula, domain=axis_bounds or None, steps=(self,))
+        # pure axis permutations (transpose, rollaxis) are invertible
+        # views in numpy: remember the parent so in-place writes on the
+        # view can notify it
+        perm = Pair._as_permutation(index_map, len(axis_bounds or ()))
+        if perm is not None and self._axis_bounds is not None:
+            # a permutation VIEW must cover the whole parent: a
+            # windowed slice can produce an identity index map with
+            # smaller extents, and that is a copy, not a view
+            p_ext = [hi - lo for lo, hi in self._axis_bounds]
+            v_ext = [hi - lo for lo, hi in (axis_bounds or ())]
+            if len(p_ext) == len(v_ext) and all(
+                p_ext[old] == v_ext[perm[old]] for old in range(len(p_ext))
+            ):
+                out._alias_parent = (self, perm)
+        return out
+
+    @staticmethod
+    def _as_permutation(index_map, ndim):
+        """index_map as an axis permutation, or None.
+
+        {} with matching ndim is the identity; {i: j, j: i} is a swap.
+        perm[new_axis] = old_axis, numpy transpose convention."""
+        if ndim == 0:
+            return None
+        perm = list(range(ndim))
+        for old_sym, expr in index_map.items():
+            try:
+                old_ax = _AXIS_SYMBOLS.index(old_sym)
+                new_ax = _AXIS_SYMBOLS.index(expr)
+            except (ValueError, TypeError):
+                return None
+            if old_ax >= ndim or new_ax >= ndim:
+                return None
+            perm[old_ax] = new_ax
+        if sorted(perm) != list(range(ndim)):
+            return None
+        return tuple(perm)
 
     def _getitem_nd(self, key):
         # u[1:, 2] on a 4x7 array -> entries ((1, 4), 2)
@@ -987,12 +1024,62 @@ class Pair:
     def __rdivmod__(self, other):
         return (other // self, other % self)
 
-    # NOTE: in-place dunders routed through self[...] = self + other
-    # were tried twice on 2026-08-21 (with copied and with shared
-    # slice buffers). Both times they regressed the linear-model
-    # predict paths with wrong values: full-overwrite setitem and the
-    # write-through composition disagree somewhere. Minimal repro in
-    # coverage/scale_min.py; the aliasing session owns this.
+    # In-place dunders, third design (2026-08-22). The two setitem
+    # routings of 2026-08-21 regressed predict paths and were
+    # reverted. This one mutates BOTH lanes of self directly (no
+    # Piecewise overwrite machinery) and notifies a view's parent only
+    # when the view is a provably invertible axis permutation;
+    # anything else refuses in one sentence.
+    def _inplace(self, other, op):
+        r = op(other)
+        if r is NotImplemented or not isinstance(r, Pair):
+            return NotImplemented
+        prior = self.formula
+        rv = Pair._value_of(r.value)
+        if isinstance(self.value, np.ndarray):
+            self.value[...] = rv
+        else:
+            self.value = r.value
+        self.formula = r.formula
+        self._axis_bounds = r._axis_bounds
+        self._record_write(prior, r)
+        link = getattr(self, "_alias_parent", None)
+        if link is not None:
+            parent, perm = link
+            from .helpers import _AXIS_SYMBOLS
+
+            back = {
+                _AXIS_SYMBOLS[new]: _AXIS_SYMBOLS[old]
+                for old, new in enumerate(perm)
+                if new != old
+            }
+            pprior = parent.formula
+            pv = np.asarray(rv)
+            if pv.ndim > 1:
+                # undo the forward permutation on the value lane
+                inv = np.argsort(np.asarray(perm))
+                pv = np.transpose(pv, axes=tuple(inv))
+            if isinstance(parent.value, np.ndarray):
+                parent.value[...] = pv
+            else:
+                parent.value = rv
+            parent.formula = (
+                r.formula.subs(back, simultaneous=True) if back else r.formula
+            )
+            parent._record_write(pprior, r)
+        return self
+
+    def __iadd__(self, other):
+        return self._inplace(other, self.__add__)
+
+    def __isub__(self, other):
+        return self._inplace(other, self.__sub__)
+
+    def __imul__(self, other):
+        return self._inplace(other, self.__mul__)
+
+    def __itruediv__(self, other):
+        return self._inplace(other, self.__truediv__)
 
     def __round__(self, ndigits=None):
         # exact except at half-way ties, where Python rounds to even
@@ -1801,6 +1888,35 @@ class Pair:
                 dst._axis_bounds = r._axis_bounds
                 dst._record_write(prior, r)
                 return dst
+            dst_raw = out[0]
+            if (
+                isinstance(dst_raw, np.ndarray)
+                and dst_raw.dtype != object
+            ):
+                # out= into a RAW buffer (X -= offset in library code):
+                # Python rebinds the augmented-assignment name to our
+                # return value, so the Pair takes over the name; the
+                # buffer gets the VALUES (aliases stay numerically
+                # coherent) and its formula origin is registered, so a
+                # later atom receiving this buffer discloses it. An
+                # alias used as an OPERAND later hits the raw-operand
+                # refusal loudly; nothing diverges silently.
+                import weakref
+
+                sub_kwargs = {
+                    k: v for k, v in kwargs.items() if k != "out"
+                }
+                r = self.__array_ufunc__(ufunc, method, *inputs, **sub_kwargs)
+                if r is NotImplemented or not isinstance(r, Pair):
+                    return r
+                dst_raw[...] = np.asarray(
+                    Pair._value_of(r.value), dtype=dst_raw.dtype
+                )
+                _session.value_origins[id(dst_raw)] = (
+                    weakref.ref(dst_raw),
+                    r.formula,
+                )
+                return r
             raise NotImplementedError("out= is not supported (mutation)")
         if method == "reduce" and ufunc in (np.maximum, np.minimum, np.add):
             a = inputs[0]

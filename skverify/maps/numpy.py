@@ -998,16 +998,45 @@ def _average_impl(a, axis=None, weights=None, **kwargs):
                 shape[ax] = -1
                 w = w.reshape(shape)  # np.average's weight alignment
             return _sum_plain(arr * w, axis=axis) / float(w.sum())
+        if isinstance(weights, Pair) or (
+            isinstance(weights, np.ndarray)
+            and weights.dtype == object
+            and any(isinstance(e, Pair) for e in weights.ravel())
+        ):
+            # numeric data, TRACED weights: np.average would dispatch
+            # straight back here on the weights. Wrap the data as a
+            # disclosed constant and take the Pair path
+            arr_f = np.asarray(Pair._numeric(arr, copy=False), dtype=float)
+            ap = Pair(
+                arr_f,
+                Pair._formula_of(arr_f),
+                tuple((0, int(n)) for n in arr_f.shape),
+            )
+            return _average_impl(ap, axis=axis, weights=weights)
         return np.average(
             Pair._numeric(arr, copy=False), axis=axis, weights=weights
         )
     if weights is None:
         return a.mean(axis=axis)
     w = weights
-    return _sum(a * w, axis=axis) / _sum(
-        w if isinstance(w, Pair) else Pair(np.asarray(w), Pair._formula_of(w), a._axis_bounds),
-        axis=axis,
-    )
+    if not isinstance(w, Pair):
+        w_arr = np.asarray(Pair._value_of(w), dtype=float)
+        w = Pair(
+            w_arr,
+            Pair._formula_of(w_arr),
+            tuple((0, int(n)) for n in w_arr.shape),
+        )
+    a_nd = len(a._axis_bounds or ())
+    w_nd = len(w._axis_bounds or ())
+    if axis is not None and a_nd > 1 and w_nd == 1:
+        # np.average aligns 1-D weights with the REDUCED axis
+        ax = axis % a_nd
+        extents = [hi - lo for lo, hi in a._axis_bounds]
+        if (w._axis_bounds[0][1] - w._axis_bounds[0][0]) == extents[ax]:
+            shape = [1] * a_nd
+            shape[ax] = extents[ax]
+            w = w.reshape(tuple(shape))
+    return _sum(a * w, axis=axis) / _sum(w, axis=axis)
 
 
 FUNCTION_TABLE[np.average] = _average
@@ -1167,7 +1196,7 @@ def _searchsorted(a, v, side="left", sorter=None):
                 steps=Pair._steps_of(a, v),
             )
         return out
-    v_f = Pair._formula_of(v)
+    v_f = Pair._bridge_numeric(Pair._formula_of(v))
     i0 = axis_idx(0)
     rel = sympy.Lt if side == "left" else sympy.Le
 
