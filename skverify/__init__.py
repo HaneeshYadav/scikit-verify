@@ -14,6 +14,15 @@ def _tidy(expr):
         fun, limits = s.function, []
         for v, lo, hi in s.limits:
             if lo == hi:
+                # the axis has one slot: drop the dummy from indexed
+                # terms outright (a dead index position), substitute
+                # anywhere it appears in arithmetic
+                fun = fun.replace(
+                    lambda x: isinstance(x, _sym.Indexed) and v in x.indices,
+                    lambda x: x.base[
+                        tuple(i for i in x.indices if i != v)
+                    ] if len(x.indices) > 1 else x.base[lo],
+                )
                 fun = fun.subs(v, lo)
             else:
                 limits.append((v, lo, hi))
