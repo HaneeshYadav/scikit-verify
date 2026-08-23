@@ -1,32 +1,45 @@
 # skverify-hypothesis
 
-The obvious uses of [Hypothesis](https://hypothesis.readthedocs.io)
-with scikit-verify certificates.
+Three helpers for testing numerical code with
+[Hypothesis](https://hypothesis.readthedocs.io).
 
 ```python
 from skverify_hypothesis import explore, edge_cases, verify
 ```
 
-* `explore(fn, like)`: one witness input per distinct certificate
-  path. Hypothesis draws inputs, each trace is signed by its
-  preconditions, every new signature is a new branch of your code
-  with its own formula. `np.median` on 4 points comes back as 24
-  paths, each with its ordering hypotheses.
+**`explore(fn, like)` -- find every branch of your function, with an
+input that reaches it.**
 
-* `edge_cases(fn, like)`: inputs sitting exactly ON precondition
-  boundaries. Each guard is solved for one input element and a drawn
-  input is projected onto the boundary: `a[0] <= a[2]` yields a tie,
-  `Ne(sum(b) - 1, 0)` yields an input whose denominator is exactly
-  zero. Returns the real function's behavior at each boundary.
+```python
+paths = explore(np.median, (np.zeros(4),))
+# 24 paths: median takes a different route for each ordering of 4 numbers.
+# You get one example input per route.
+```
 
-* `verify(fn, *args)`: inside your own `@given` test -- trace, check
-  the certificate against the plain run, fail loudly with both
-  values and the formula.
+You wrote one test input; your function has 24 behaviors. This finds
+all of them so your tests can cover them.
+
+**`edge_cases(fn, like)` -- generate the inputs most likely to break
+your function.**
+
+```python
+cases = edge_cases(my_metric, (np.zeros(4),))
+# inputs with exact ties, denominators that are exactly zero,
+# values exactly on every if-condition in your code
+```
+
+Bugs live on boundaries: the tie, the zero denominator, the equal
+endpoints. This reads your code's actual conditions and builds inputs
+that sit exactly on them, then shows you what your function does
+there. (This is how we found a NaN bug in scipy.stats.)
+
+**`verify(fn, *args)` -- one extra line that makes a Hypothesis test
+check the math, not just "it didn't crash."**
 
 ```python
 @given(arrays(np.float64, 4, elements=st.floats(-2, 2, allow_nan=False)))
 def test_median(a):
-    verify(np.median, a)
+    verify(np.median, a)   # fails loudly if the math is ever wrong
 ```
 
 Requires `hypothesis` and `scikit-verify`.
