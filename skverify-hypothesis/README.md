@@ -7,7 +7,7 @@ Three helpers for testing numerical code with
 from skverify_hypothesis import explore, edge_cases, verify
 ```
 
-**`explore(fn, like)` -- find every branch of your function, with an
+**`explore(fn, like)`: find every branch of your function, with an
 input that reaches it.**
 
 ```python
@@ -19,7 +19,7 @@ paths = explore(np.median, (np.zeros(4),))
 You wrote one test input; your function has 24 behaviors. This finds
 all of them so your tests can cover them.
 
-**`edge_cases(fn, like)` -- generate the inputs most likely to break
+**`edge_cases(fn, like)`: generate the inputs most likely to break
 your function.**
 
 ```python
@@ -33,7 +33,7 @@ endpoints. This reads your code's actual conditions and builds inputs
 that sit exactly on them, then shows you what your function does
 there. (This is how we found a NaN bug in scipy.stats.)
 
-**`verify(fn, *args)` -- one extra line that makes a Hypothesis test
+**`verify(fn, *args)`: one extra line that makes a Hypothesis test
 check the math, not just "it didn't crash."**
 
 ```python

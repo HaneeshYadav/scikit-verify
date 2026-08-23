@@ -39,7 +39,7 @@ out = [
     "Every function we have run through `to_sympy`, and what happened.",
     "**Works** means the traced value matched the library exactly on",
     "that call. **Refuses** means a one-sentence refusal instead of a",
-    "result -- the rules behind refusals are in",
+    "result. The rules behind refusals are in",
     "[sharp bits](sharp-bits.md). Regenerate this page with the",
     "scripts in `coverage/`.",
     "",

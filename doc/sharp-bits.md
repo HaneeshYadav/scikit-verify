@@ -6,7 +6,7 @@ few places a refusal can happen, and what to do instead.
 
 ## 1. Discretization changes the math
 
-Rounding is `floor(x*10^d + 1/2)/10^d` -- exact everywhere except
+Rounding is `floor(x*10^d + 1/2)/10^d`. It is exact everywhere except
 half-way ties, where numpy rounds half to EVEN. `round()` and
 `np.round()` therefore lift with recorded tie-free assumptions, and
 refuse only when a value actually sits on a tie:
@@ -33,7 +33,7 @@ Assigning traced values into a float buffer the tracer has never
 seen (one passed in from outside, or built by a library before your
 data arrived) would silently drop formulas, so it refuses. Writes into
 allocations made inside traced code (`np.zeros`, `np.empty`, `np.eye`),
-`out=` into traced targets, and ordinary assignment all work -- the
+`out=` into traced targets, and ordinary assignment all work: the
 tracer rewrites them to keep both lanes.
 
 *Instead:* build results functionally, or let the traced allocation
@@ -42,7 +42,7 @@ handle it (it usually does without any change to your code).
 ## 4. Loops fold when the body repeats
 
 A loop whose body does the same mathematics each iteration folds into
-a held recurrence -- constant-size, any iteration count. A body that
+a held recurrence: constant-size, any iteration count. A body that
 changes shape every iteration cannot fold; it stays exact but
 unrolled, and past a growth budget it refuses rather than hang.
 
@@ -68,13 +68,13 @@ recorded and, where a contract exists, checked against its defining
 equation on this very call: `solve` against `A @ x == b`, `svd`
 against `U diag(S) Vh == A` with orthonormality, `fft` against the
 DFT sum evaluated naively, `lstsq` against the normal equations.
-This is not a refusal -- it is the honest boundary, disclosed in
+This is not a refusal. It is the honest boundary, disclosed in
 `.unchecked`.
 
 ## Everything else
 
 Branches on data become recorded assumptions. Masks, gathers,
 scatters, sets, dicts, classes, closures, generators, recursion,
-broadcasting, empty arrays, pickling -- traced. If you find ordinary
+broadcasting, empty arrays, pickling: all traced. If you find ordinary
 NumPy code that dies with anything other than a one-sentence refusal,
 that is a bug in scikit-verify: please report it.
