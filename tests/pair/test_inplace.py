@@ -44,6 +44,8 @@ def test_neutral_copy_owns_its_buffer():
 
 
 def test_predict_after_inplace_preprocessing():
+    pytest = __import__("pytest")
+    pytest.importorskip("sklearn")
     from sklearn.linear_model import LinearRegression
 
     rng = np.random.default_rng(7)
