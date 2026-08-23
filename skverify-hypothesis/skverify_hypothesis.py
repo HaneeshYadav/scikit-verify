@@ -53,18 +53,24 @@ def explore(fn, like, max_examples=200, lo=-3.0, hi=3.0):
         return tuple(draw(s) for s in strategies)
 
     strat = draw_args()
+    last_reason = None
     for _ in range(max_examples):
         args = strat.example()
         try:
             out = to_sympy(fn, *[np.copy(a) if isinstance(a, np.ndarray) else a
                                  for a in args])
-        except Exception:
+        except Exception as e:
             skipped += 1
+            last_reason = f"{type(e).__name__}: {str(e)[:120]}"
             continue
         sig = str(getattr(out, "preconditions", sympy.true))
         if sig not in seen:
             seen.add(sig)
             found.append((args, out))
+    if skipped:
+        # silence hides problems: say what happened and why
+        print(f"[skverify-hypothesis] {skipped}/{max_examples} draws did "
+              f"not trace; last reason: {last_reason}")
     return found
 
 
@@ -93,6 +99,17 @@ def edge_cases(fn, like, max_paths=20, lo=-3.0, hi=3.0):
             expr = None
             if isinstance(g, sympy.Not) and isinstance(g.args[0], (sympy.Eq, sympy.Ne)):
                 g = g.args[0]
+            if isinstance(g, sympy.Eq):
+                # indicator equality: Eq(Piecewise((1, cond), (0, True)), v)
+                # is just cond (or its negation); the boundary is cond's
+                for side in (g.lhs, g.rhs):
+                    if (
+                        isinstance(side, sympy.Piecewise)
+                        and len(side.args) == 2
+                        and side.args[0][0] == 1
+                    ):
+                        g = side.args[0][1]
+                        break
             if isinstance(g, (sympy.StrictLessThan, sympy.LessThan,
                               sympy.StrictGreaterThan, sympy.GreaterThan,
                               sympy.Eq, sympy.Ne)):
