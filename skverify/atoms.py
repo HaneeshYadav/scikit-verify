@@ -390,7 +390,7 @@ def _opaque_call_impl(Pair, func, args, kwargs):
                 n_const += 1
     # f2py fortran objects report __name__ as "function dgbsv":
     # keep the identifier part only
-    fname = getattr(func, "__name__", "opaque").split()[-1]
+    fname = getattr(func, "__name__", "opaque").split()[-1].lstrip("_")
     call = sympy.Function(fname)(*formulas)
     if isinstance(result, tuple):
         # multi-output routine (LAPACK gbsv: lu, piv, x, info): each
