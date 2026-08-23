@@ -4,16 +4,61 @@ from skverify.maps import special as _special_map
 from .api import to_sympy
 
 
-def latex(expr):
-    """sympy.latex with code-ish names (containing underscores)
-    rendered as upright text instead of nested subscripts."""
+def _tidy(expr):
+    """Print-tier cleanups that change nothing mathematically:
+    collapse sum axes of extent one, and state negated comparisons
+    positively (-a/n > -b/n becomes a/n < b/n)."""
+    import sympy as _sym
+
+    def collapse(s):
+        fun, limits = s.function, []
+        for v, lo, hi in s.limits:
+            if lo == hi:
+                fun = fun.subs(v, lo)
+            else:
+                limits.append((v, lo, hi))
+        if fun.could_extract_minus_sign():
+            # a sum of negated terms IS the negated sum: pull the sign
+            # out so comparisons can read positively
+            inner = _sym.Sum(-fun, *limits) if limits else -fun
+            return -inner
+        return _sym.Sum(fun, *limits) if limits else fun
+
+    expr = expr.replace(lambda x: isinstance(x, _sym.Sum), collapse)
+    rel_flip = {
+        _sym.Lt: _sym.Gt, _sym.Le: _sym.Ge,
+        _sym.Gt: _sym.Lt, _sym.Ge: _sym.Le,
+    }
+    if type(expr) in rel_flip:
+        lhs, rhs = expr.lhs, expr.rhs
+        if lhs.could_extract_minus_sign() and rhs.could_extract_minus_sign():
+            expr = rel_flip[type(expr)](-lhs, -rhs)
+    return expr
+
+
+def latex(expr, aliases=None):
+    """sympy.latex with readable defaults for certificates: code-ish
+    names render upright, sum axes of extent one collapse, negated
+    comparisons read positively. Pass a dict as `aliases` to shorten
+    long names to T1, T2, ...; the dict fills with alias -> full name
+    so you can print a legend."""
     import sympy as _sym
 
     if not isinstance(expr, _sym.Basic):
         return str(expr)
-    names = {
-        s: r"\mathtt{%s}" % str(s).replace("_", r"\_")
-        for s in expr.atoms(_sym.Symbol)
-        if "_" in str(s)
-    }
+    expr = _tidy(expr)
+    names = {}
+    for s in sorted(expr.atoms(_sym.Symbol), key=str):
+        n = str(s)
+        if "_" not in n:
+            continue
+        if aliases is not None and len(n) > 14:
+            short = next(
+                (k for k, v in aliases.items() if v == n),
+                f"T{len(aliases) + 1}",
+            )
+            aliases[short] = n
+            names[s] = r"\mathtt{%s}" % short
+        else:
+            names[s] = r"\mathtt{%s}" % n.replace("_", r"\_")
     return _sym.latex(expr, symbol_names=names)
