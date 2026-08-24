@@ -53,18 +53,6 @@ to_sympy(lambda a: a.astype(int).mean(), np.array([1.4, 2.6]))
 # NotImplementedError: astype to non-float would change the math
 ```
 
-This works on real library code, not just kernels: scikit-learn metrics
-come back as their defining formulas (precision as its ratio of counting
-sums), fitted estimators as their closed forms, iterative solvers as
-held recurrences, and compiled routines (LAPACK, FFT, Cython) as named
-terms that are checked against their defining equations on every call:
-svd against U diag(S) Vh = A, fft against the DFT sum itself.
-
-Randomness stays honest too. A draw like ``rng.normal(0, s)`` enters
-the formula as a random variable with that distribution, so
-``sympy.stats.E`` and ``variance`` of the result compute in closed
-form, while the concrete run keeps the exact numbers drawn.
-
 Tested against numpy, scipy, scikit-learn, statsmodels, cvxpy and
 random research code from GitHub; the boards in [coverage](coverage/)
 regenerate every number.
