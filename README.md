@@ -4,6 +4,13 @@
 
 <p align="center">Translate Python and NumPy programs to symbolic mathematics</p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="doc/hero-dark.svg">
+    <img src="doc/hero-light.svg" alt="weighted_rms in numpy maps to the square root of the ratio of weighted sums" width="640">
+  </picture>
+</p>
+
 ![CI](https://github.com/aadya940/scikit-verify/actions/workflows/ci.yml/badge.svg)
 
 * [Source code](https://github.com/aadya940/scikit-verify)
