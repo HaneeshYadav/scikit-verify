@@ -12,17 +12,13 @@ Two tools:
 * `derivation()`: the step-by-step derivation of the most recent
   trace.
 
-Run:
+Install and register with a client (Claude Code, Cursor, any other):
 
 ```bash
-python skverify-mcp/server.py
+pip install "scikit-verify[mcp]"
 ```
-
-Or register with a client:
 
 ```json
-{"mcpServers": {"skverify": {"command": "python",
-  "args": ["/path/to/skverify-mcp/server.py"]}}}
+{"mcpServers": {"skverify": {"command": "skverify-mcp"}}}
 ```
 
-Requires `mcp` and `scikit-verify`.

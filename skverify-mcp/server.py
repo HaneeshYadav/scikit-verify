@@ -116,5 +116,9 @@ def derivation(max_chars: int = 40000) -> dict:
     return {"derivation": _cap(str(text), max_chars)}
 
 
-if __name__ == "__main__":
+def main():
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

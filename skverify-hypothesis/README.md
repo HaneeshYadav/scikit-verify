@@ -42,4 +42,9 @@ def test_median(a):
     verify(np.median, a)   # fails loudly if the math is ever wrong
 ```
 
-Requires `hypothesis` and `scikit-verify`.
+Install:
+
+```bash
+pip install "scikit-verify[hypothesis]"
+```
+

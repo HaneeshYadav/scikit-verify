@@ -71,11 +71,20 @@ regenerate every number.
 ## Installation
 
 ```bash
-pip install git+https://github.com/aadya940/scikit-verify.git
+pip install scikit-verify
 ```
 
 Requires Python >= 3.11, `numpy`, and `sympy`. The import name is
-`skverify`. Pre-alpha; the API may change.
+`skverify`. The companion layers install as extras:
+
+```bash
+pip install "scikit-verify[mcp]"          # MCP server for coding agents
+pip install "scikit-verify[hypothesis]"   # testing helpers
+```
+
+Pre-alpha; the API may change. Iterative solvers at real sizes can be
+slow to trace (minutes, not wrong); the boards in coverage/ carry
+timings.
 
 ## Lineage
 

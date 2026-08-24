@@ -39,6 +39,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+mcp = ["mcp>=1.2,<2"]
+hypothesis = ["hypothesis>=6"]
 dev = [
     "pytest>=8",
     "hypothesis>=6",
@@ -46,12 +48,25 @@ dev = [
     "scipy>=1.12",  # test material only: real kernels the tracer lifts
 ]
 
+[project.scripts]
+skverify-mcp = "skverify_mcp.server:main"
+
 [project.urls]
 Homepage = "https://github.com/aadya940/scikit-verify"
 Issues = "https://github.com/aadya940/scikit-verify/issues"
 
-[tool.setuptools.packages.find]
-include = ["skverify*"]
+[tool.setuptools]
+packages = [
+    "skverify",
+    "skverify.instrument",
+    "skverify.maps",
+    "skverify_mcp",
+    "skverify_hypothesis",
+]
+
+[tool.setuptools.package-dir]
+skverify_mcp = "skverify-mcp"
+skverify_hypothesis = "skverify-hypothesis"
 
 [tool.setuptools_scm]
 
