@@ -1,13 +1,40 @@
 # Examples
- 
-Small, self-contained numerical kernels traced with `to_sympy`. Each file
-runs directly and prints the recovered formulas alongside the ordinary
-numerical results.
- 
+
+Executed notebooks first, small runnable scripts after. The notebooks
+render every formula in LaTeX; open them on GitHub and the math shows
+inline.
+
+## Notebooks
+
+**[demo.ipynb](demo.ipynb)** is the tour: trace a function, read the
+formula, see the assumptions, watch a refusal.
+
+**[ridgecv_decision.ipynb](ridgecv_decision.ipynb)** asks what
+cross-validation actually decides. Tracing sklearn's RidgeClassifierCV
+returns the alpha choice as two inequalities you can check against
+sklearn's own error numbers, and shows the coefficients jump when a
+sample sits exactly on the class boundary.
+
+**[sabotage_audit.ipynb](sabotage_audit.ipynb)** takes sabotaged
+research code (a precision function quietly counting the wrong thing,
+an entropy formula from a published sabotage benchmark) and shows the
+corruption in the formulas even where the outputs are identical.
+
+**[knot_debugging.ipynb](knot_debugging.ipynb)** debugs a spline knot
+vector the way a user would: trace the validation with a good vector,
+read the conditions the code checked, break the vector, watch your own
+error arrive, then prove with a solver that the check in the code is
+exactly sufficient.
+
+## Scripts
+
+Each runs directly and prints the recovered formulas alongside the
+ordinary numerical results:
+
 ```bash
 python markov_birth_death.py
 ```
- 
+
 ## markov_birth_death.py
  
 A birth–death Markov chain on states `0..n-1`, written without matrices;
