@@ -85,7 +85,8 @@ zero. Refusals are honest and listed by reason.
   formula lane is the shape of it; elementwise + matmul +
   `torch.linalg.solve` would be a great first milestone. The hard
   parts we already know about: in-place ops and views, and autograd
-  (trace forward-only at first). See the tracking issue.
+  (trace forward-only at first). If you want to take this on, open an
+  issue and we will map it out together.
 
 ## Pull requests
 
