@@ -88,6 +88,32 @@ zero. Refusals are honest and listed by reason.
   (trace forward-only at first). If you want to take this on, open an
   issue and we will map it out together.
 
+## Testing
+
+The test that matters is always the same one: trace the function,
+evaluate the traced formula at the inputs, and compare against what
+the untraced function returns. The equation checks itself against the
+run that produced it. A typical test is four lines:
+
+```python
+def test_my_case():
+    ref = fn(x)
+    out = to_sympy(fn, x)
+    assert np.allclose(float(out.value), ref)
+```
+
+For a new mechanism, add the case that used to fail, plus the edge
+your mechanism claims to handle (the tie, the empty axis, the
+in-place write). If the change touches branching, assert the
+conditions too: the formula and its assumptions are one result.
+
+## AI policy
+
+Use AI for anything: code, tests, docs, this file. The one condition
+is that you have manually reviewed every line you submit and can
+explain it. You are the author; the AI was the typist. PRs that read
+like nobody looked at them will be treated accordingly.
+
 ## Pull requests
 
 Tests for the change, suite green, boards rerun if the tracer was
