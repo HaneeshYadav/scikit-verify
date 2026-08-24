@@ -102,3 +102,5 @@ Converting NumPy to SymPy was wished for in
 
 BSD-3-Clause. scikit-verify is an independent project and is not affiliated
 with the SciPy developers.
+
+If this is useful to you, a star helps others find it ⭐
