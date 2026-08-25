@@ -64,6 +64,11 @@ Tested against numpy, scipy, scikit-learn, statsmodels, cvxpy and
 random research code from GitHub; the boards in [coverage](coverage/)
 regenerate every number.
 
+A certificate is also the statement a proof assistant consumes: the
+formula with its hypotheses. A Lean 4 / Mathlib bridge for the
+rational-arithmetic fragment is on the roadmap, upgrading certificates
+from solver-checked to kernel-checked.
+
 ## Installation
 
 ```bash
