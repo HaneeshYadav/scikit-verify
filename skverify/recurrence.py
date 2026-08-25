@@ -170,8 +170,28 @@ def inline(expr, mapping):
 
 
 def _inline_passes(expr, mapping, keys):
-    for _ in range(3):  # meanings may reference other recurrence symbols
-        present = expr.free_symbols & keys
+    # self-referential meanings (closed-form slots) can never inline
+    # to completion; they stay held and belong in definitions
+    keys = {
+        k for k in keys
+        if not (isinstance(mapping[k], sympy.Basic)
+                and k in mapping[k].free_symbols)
+    }
+    # meanings small enough to chase to fixpoint (chain links between
+    # fold segments); heavyweight meanings (held Iterate structures)
+    # get the classic bounded passes and stay defined if unresolved
+    def _small(v):
+        if not isinstance(v, sympy.Basic):
+            return True
+        try:
+            return sympy.count_ops(v) <= 256
+        except (TypeError, ValueError):
+            return False  # held structures count as heavy
+
+    light = {k for k in keys if _small(mapping[k])}
+    for round_ in range(64):
+        active = keys if round_ < 3 else light
+        present = expr.free_symbols & active
         if not present:
             break
         idx_labels = {
@@ -602,6 +622,10 @@ def _repair(rec, keep_ids=(), lazy=False):
     subs = rec.get("repairs", {})
     if not subs:
         return
+    # mirror every probe meaning at session scope: formulas EMBEDDED
+    # into pairs older than the plant (scatter targets) escape the
+    # walks below, and the harvest's final sweep needs the map
+    _session.probe_repairs.update(subs)
     keys = set(subs)
     done = set()
     # planted pairs repair by DIRECT assignment: substituting a probe

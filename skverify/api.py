@@ -126,6 +126,70 @@ def to_sympy(fn, *args, **kwargs):
             # preconditions after all
             _GUARDS.extend(pending)
         _session.pending_mask_guards.clear()
+        mirror = getattr(_session, "probe_repairs", {})
+        if mirror:
+            # fold probes must not outlive the trace: sweep any that
+            # ended up EMBEDDED in older pairs' formulas (scatter
+            # targets predate the plant, so the fold's own repair
+            # walks never see them)
+            mkeys = set(mirror)
+
+            def _sweep(e):
+                if not isinstance(e, sympy.Basic):
+                    return e
+                # substitution must not pay evaluation: probe meanings
+                # can be held Iterate structures, and rebuilding the
+                # tree through evaluating constructors (Abs.eval ->
+                # expand) hangs on them. Same discipline as inline().
+                with sympy.evaluate(False):
+                    return _sweep_passes(e)
+
+            def _sweep_passes(e):
+                for _ in range(4):
+                    hit = e.free_symbols & mkeys
+                    idx_hit = e.has(sympy.Indexed) and any(
+                        getattr(x.base, "label", None) in mkeys
+                        for x in e.atoms(sympy.Indexed)
+                    )
+                    if not hit and not idx_hit:
+                        break
+                    if hit:
+                        e = e.xreplace({d: mirror[d] for d in hit})
+                    if idx_hit:
+                        from .helpers import axis_idx
+
+                        e = e.replace(
+                            lambda x: isinstance(x, sympy.Indexed)
+                            and getattr(x.base, "label", None) in mkeys,
+                            lambda x: mirror[x.base.label].subs(
+                                axis_idx(0), x.indices[0]
+                            ),
+                        )
+                return e
+
+            if hasattr(out, "formula"):
+                f = out.formula
+                if isinstance(f, sympy.NDimArray):
+                    out.formula = sympy.ImmutableDenseNDimArray(
+                        [_sweep(e) for e in f], f.shape
+                    )
+                else:
+                    out.formula = _sweep(f)
+            for i, g in enumerate(_GUARDS):
+                _GUARDS[i] = _sweep(g)
+            if getattr(out, "definitions", None):
+                out.definitions = {
+                    k: _sweep(v) for k, v in out.definitions.items()
+                }
+            leftover = set()
+            if hasattr(out, "formula") and isinstance(out.formula, sympy.Basic):
+                leftover = out.formula.free_symbols & mkeys
+            if leftover:
+                raise NotImplementedError(
+                    "an internal loop symbol survived folding; the "
+                    "certificate would reference an undefined term -- "
+                    "please report this"
+                )
         if _session.recurrences:
             # folded loops traced through featherweight symbols whose
             # meanings live in the definitions map. Small certificates
@@ -153,7 +217,15 @@ def to_sympy(fn, *args, **kwargs):
                 for i, g in enumerate(_GUARDS):
                     if isinstance(g, sympy.Basic):
                         _GUARDS[i] = inline(g, rec_map)
-                out.definitions = {}
+                # anything still referencing a recurrence symbol
+                # (self-referential closed forms) keeps its definition
+                left = set()
+                if hasattr(out, "formula"):
+                    f2 = out.formula
+                    for e in (list(f2) if isinstance(f2, sympy.NDimArray) else [f2]):
+                        if isinstance(e, sympy.Basic):
+                            left |= e.free_symbols & set(rec_map)
+                out.definitions = {k: rec_map[k] for k in left}
             else:
                 # only definitions the certificate actually REACHES:
                 # the transitive closure from formula and guards. The
@@ -198,9 +270,29 @@ def to_sympy(fn, *args, **kwargs):
             )
         out.unchecked = tuple(records)
         out.instrumented = sites
-    except (AttributeError, TypeError):
-        pass  # slots-only/immutable results keep their trace in skverify.pair._OPAQUE
+    except (AttributeError, TypeError) as harvest_err:
+        # slots-only/immutable results legitimately reject attribute
+        # writes; anything else here is a swallowed harvest bug
+        if not _is_attr_write_rejection(harvest_err, out):
+            raise
     return out
+
+
+def _is_attr_write_rejection(err, out):
+    """True when the harvest failure is the known benign case: the
+    traced result is a slots-only/immutable object that rejects our
+    metadata attributes. Every other failure must surface."""
+    if not isinstance(err, (AttributeError, TypeError)):
+        return False
+    msg = str(err)
+    return (
+        "has no attribute" in msg
+        or "read-only" in msg
+        or "immutable" in msg
+        or "can't set attribute" in msg
+        or "cannot set" in msg
+        or not hasattr(out, "__dict__")
+    )
 
 
 def _wrap(name, val):

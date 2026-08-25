@@ -54,6 +54,7 @@ class TraceSession:
         self.loop_new = []
         self.loop_fold = {}
         self.recurrences = {}
+        self.probe_repairs = {}
         self.value_origins = {}
         self.seq = 0
 
@@ -76,6 +77,7 @@ class TraceSession:
         self.loop_fold.clear()
         self.recurrences.clear()
         self.value_origins.clear()
+        self.probe_repairs.clear()
         self.seq = 0
 
     def next_seq(self):
