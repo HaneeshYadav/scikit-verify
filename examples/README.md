@@ -25,9 +25,3 @@ sample sits exactly on the class boundary.
 research code (a precision function quietly counting the wrong thing,
 an entropy formula from a published sabotage benchmark) and shows the
 corruption in the formulas even where the outputs are identical.
-
-**[knot_debugging.ipynb](knot_debugging.ipynb)** debugs a spline knot
-vector the way a user would: trace the validation with a good vector,
-read the conditions the code checked, break the vector, watch your own
-error arrive, then prove with a solver that the check in the code is
-exactly sufficient.
