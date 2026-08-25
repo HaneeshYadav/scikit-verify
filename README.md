@@ -19,6 +19,7 @@
 * [skverify-mcp](skverify-mcp/) - MCP for mathematical feedback for coding agents
 * [skverify-hypothesis](skverify-hypothesis/) - find every branch, boundary and edge case of your function with Hypothesis
 * [Blog post](https://medium.com/@aadyachinubhai/scikit-verify-translate-python-numpy-programs-to-symbolic-mathematics-c664d41ba571) - the story and the mathematics, with examples
+* [Demo](examples/penalty_matrix_check.ipynb) - a 20-page SciPy derivation, checked mechanically in two minutes
 
 scikit-verify is a tracer for numerical Python. It runs your NumPy
 function once and returns the formula it computed, as an ordinary SymPy
@@ -59,21 +60,6 @@ symbolic form, scikit-verify raises instead of guessing:
 to_sympy(lambda a: a.astype(int).mean(), np.array([1.4, 2.6]))
 # NotImplementedError: astype to non-float would change the math
 ```
-
-## The demo
-
-While adding smoothing splines with user knots to SciPy, a penalty
-matrix had to be validated, and the only way was a
-[20-page hand derivation](https://github.com/aadya940/scipy-bspline-testing/blob/main/B_Splines_with_arbitary_knots-gcv.pdf).
-[This notebook](examples/penalty_matrix_check.ipynb) now does the check
-mechanically: skverify traces the implementation, every matrix entry
-comes back as a formula in the knots, and the difference from the
-defining integral cancels to zero identically, for every knot vector
-of that shape at once. The trace also surfaces the code's own
-assumptions (the repeated-knot structure), proves that straight lines
-have exactly zero penalty, and checks the function shipped in the PR
-against the exact integral. Weeks of derivation, checked in two
-minutes, rerunnable on every code change.
 
 Tested against numpy, scipy, scikit-learn, statsmodels, cvxpy and
 random research code from GitHub; the boards in [coverage](coverage/)
