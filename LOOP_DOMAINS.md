@@ -1,5 +1,11 @@
 # Loops as domains
 
+*Status: implemented. This is the design note behind the fold that now
+lives in the formula lane (`skverify/recurrence.py`): Iterate, plant
+and probe, segment re-engagement, held head symbols. Kept as the
+record of why it is shaped the way it is; the opening paragraph
+describes the world BEFORE it landed.*
+
 A loop is an axis in time. Array axes are already domains: `x[i]` with
 bounds, bound by `Sum(..., (i, 0, n-1))`. An iteration index `k` is the
 same object, bound by a recurrence instead of a reduction. Today the
