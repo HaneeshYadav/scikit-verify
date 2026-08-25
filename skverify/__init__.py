@@ -53,6 +53,13 @@ def latex(expr, aliases=None):
     so you can print a legend."""
     import sympy as _sym
 
+    if isinstance(expr, _sym.MatrixBase):
+        names = {
+            s_: r"\mathtt{%s}" % str(s_).replace("_", r"\_")
+            for s_ in expr.free_symbols
+            if "_" in str(s_)
+        }
+        return _sym.latex(expr, symbol_names=names)
     if not isinstance(expr, _sym.Basic):
         return str(expr)
     expr = _tidy(expr)
