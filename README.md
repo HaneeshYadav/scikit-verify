@@ -19,7 +19,7 @@
 * [skverify-mcp](skverify-mcp/) - MCP for mathematical feedback for coding agents
 * [skverify-hypothesis](skverify-hypothesis/) - find every branch, boundary and edge case of your function with Hypothesis
 * [Blog post](https://medium.com/@aadyachinubhai/scikit-verify-translate-python-numpy-programs-to-symbolic-mathematics-c664d41ba571) - the story and the mathematics, with examples
-* [Demo](examples/penalty_matrix_check.ipynb) - a 20-page SciPy derivation, checked mechanically in two minutes
+* [Demo](examples/penalty_matrix_check.ipynb) - a 20-page SciPy derivation, checked in two minutes
 
 scikit-verify is a tracer for numerical Python. It runs your NumPy
 function once and returns the formula it computed, as an ordinary SymPy
