@@ -6,6 +6,12 @@ inline.
 
 ## Notebooks
 
+**[penalty_matrix_check.ipynb](penalty_matrix_check.ipynb)** is the
+headline: a 20-page scipy derivation checked mechanically. The
+implementation is traced, its entries come back as formulas in the
+knots, and the identity with the defining integral is proved for every
+knot vector of that shape at once.
+
 **[demo.ipynb](demo.ipynb)** is the tour: trace a function, read the
 formula, see the assumptions, watch a refusal.
 
