@@ -160,6 +160,40 @@ def _where(cond, a=None, b=None):
     )
 
 
+def _prune_dead_branches(expr):
+    """Drop Piecewise branches whose condition is self-contradictory
+    (Eq(k, 0) & Eq(k, 1) from products of sparse scatter rows). sympy
+    keeps these dead branches, and chained matmuls multiply them
+    combinatorially; pruning restores the sparsity the code had."""
+
+    def contradictory(cond):
+        if not isinstance(cond, sympy.And):
+            return False
+        pinned = {}
+        for c in cond.args:
+            if isinstance(c, sympy.Eq):
+                lhs, rhs = c.args
+                if rhs.is_number:
+                    if lhs in pinned and pinned[lhs] != rhs:
+                        return True
+                    pinned[lhs] = rhs
+        return False
+
+    def prune(pw):
+        kept = [
+            (v, c) for v, c in pw.args if not contradictory(c)
+        ]
+        if len(kept) == len(pw.args):
+            return pw
+        if not kept:
+            return sympy.Integer(0)
+        return sympy.Piecewise(*kept)
+
+    return expr.replace(
+        lambda e: isinstance(e, sympy.Piecewise), prune
+    )
+
+
 def _held_sum(body, *limits):
     """Construct ``Sum(body, *limits)`` without hoisting re-evaluation.
 
@@ -185,11 +219,28 @@ def _held_sum(body, *limits):
                 pw.has(*dummies)
                 for pw in inner.function.atoms(sympy.Piecewise)
             ):
+                extents = [
+                    lim[2] - lim[1] + 1 for lim in inner.limits
+                    if lim[2].is_number and lim[1].is_number
+                ]
+                if len(extents) != len(inner.limits) or any(
+                    e > 64 for e in extents
+                ):
+                    continue  # symbolic or large extent: unroll refused
                 try:
-                    resolved = inner.doit()
+                    # fold FIRST so branch conditions materialize as
+                    # And-conjunctions, then prune the contradictions:
+                    # each entry collapses to its true sparsity before
+                    # the next chain level can multiply dead branches
+                    resolved = _prune_dead_branches(
+                        sympy.piecewise_fold(inner.doit())
+                    )
                 except Exception:
                     continue
-                if not resolved.has(sympy.Piecewise):
+                if not resolved.has(sympy.Sum):
+                    # the inner binder is gone: any Piecewise left
+                    # conditions only on outer indices, the single-Sum
+                    # shape the guarded constructor handles
                     resolutions[inner] = resolved
         if resolutions:
             body = body.xreplace(resolutions)
