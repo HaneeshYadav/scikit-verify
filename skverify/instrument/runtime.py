@@ -79,6 +79,59 @@ def _skv_empty(shape, dtype=None, *args, **kwargs):
     )
 
 
+def _traced_diags(fn, diagonals, offsets=0, shape=None, format=None, dtype=None):
+    """scipy's diagonal-matrix constructors on traced data: a dense
+    Pair built through the ordinary scatter machinery. Storage format
+    is bookkeeping; the mathematics is which entry holds which value."""
+    from .triage import _traced
+
+    args_traced = _traced(diagonals) or (
+        isinstance(diagonals, (list, tuple))
+        and any(_traced(d) for d in diagonals)
+    )
+    if not args_traced:
+        return fn(diagonals, offsets=offsets, shape=shape,
+                  format=format, dtype=dtype)
+    if isinstance(offsets, (int, np.integer)):
+        # scipy: a scalar offset takes ONE bare diagonal, never a list
+        # of arrays; the traced path must reject what scipy rejects
+        if isinstance(diagonals, (list, tuple)) and len(diagonals) and (
+            isinstance(diagonals[0], (list, tuple, np.ndarray, Pair))
+        ):
+            raise ValueError("Different number of diagonals and offsets.")
+        offs = [int(offsets)]
+        diags = [diagonals]
+    else:
+        offs = [int(o) for o in offsets]
+        diags = list(diagonals)
+        if len(offs) != len(diags):
+            raise ValueError("Different number of diagonals and offsets.")
+    if shape is None:
+        n = len(np.asarray(
+            diags[0].value if isinstance(diags[0], Pair) else diags[0],
+            dtype=object).ravel()) + abs(offs[0])
+        shape = (n, n)
+    rows, cols = int(shape[0]), int(shape[1])
+    out = _skv_zeros((rows, cols))
+    for off, vec in zip(offs, diags):
+        L = min(rows, cols - off) if off >= 0 else min(rows + off, cols)
+        for j in range(int(L)):
+            e = vec[j]
+            if (
+                isinstance(e, Pair)
+                and e.formula == 0
+                and float(np.asarray(e.value)) == 0.0
+            ) or (not isinstance(e, Pair) and float(e) == 0.0):
+                # zero in BOTH lanes: writing it is a no-op, and every
+                # skipped write keeps the scatter at true sparsity --
+                # the chain downstream pays per write, not per entry
+                continue
+            r = j if off >= 0 else j - off
+            c = j + off if off >= 0 else j
+            out[r, c] = e
+    return out
+
+
 def _skv_neutral(a, dtype=None, **kwargs):
     if isinstance(a, Pair):
         value = a.value

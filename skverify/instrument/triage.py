@@ -81,6 +81,18 @@ def _skv_maybe(fn):
         from .runtime import _skv_neutral
 
         return _skv_neutral
+    if getattr(fn, "__name__", None) in ("diags_array", "diags"):
+        # sparse diagonal constructors: on traced data the matrix
+        # lives dense in the value lane (structured allocation, the
+        # eye family); untraced calls go to the real constructor
+        from .runtime import _traced_diags
+
+        def diags_shim(diagonals, offsets=0, shape=None, format=None,
+                       dtype=None):
+            return _traced_diags(fn, diagonals, offsets=offsets,
+                                 shape=shape, format=format, dtype=dtype)
+
+        return diags_shim
     if getattr(fn, "__name__", None) in CONCRETE_BY_NAME:
         # inventory routines run on concrete values: their results are
         # facts about this trace, and their bodies (sorting, boolean

@@ -870,6 +870,37 @@ class Pair:
         self._parents = (prior,) + Pair._steps_of(*operands)
         self._seq = _session.next_seq()  # the write happened NOW; creation seq is stale
 
+    def tocsc(self):
+        # a traced sparse matrix lives DENSE in the value lane: storage
+        # format is bookkeeping, not mathematics
+        return self
+
+    def tocsr(self):
+        return self
+
+    def diagonal(self, offset=0):
+        """The k-th diagonal as a 1-D Pair: a structured gather."""
+        from .helpers import axis_idx
+
+        off = int(offset)
+        value = np.diagonal(np.asarray(self.value), off).copy()
+        i0 = axis_idx(0)
+        I, J = axis_idx(0), axis_idx(1)
+        row = i0 + (-off if off < 0 else 0)
+        col = i0 + (off if off > 0 else 0)
+        # two fresh dummies, one per axis, replaced SIMULTANEOUSLY:
+        # row and col are both expressions in the axis-0 symbol, so
+        # any sequential substitution cross-contaminates
+        tr, tc = sympy.Dummy("diag_r"), sympy.Dummy("diag_c")
+        formula = self.formula.xreplace({I: tr, J: tc})
+        formula = formula.xreplace({tr: row, tc: col})
+        return Pair(
+            value,
+            formula,
+            ((0, int(value.shape[0])),),
+            steps=(self,),
+        )
+
     def transpose(self, axes=None):
         # u (4x7), u.T: u[i, j] -> u[j, i], bounds ((0,4),(0,7)) -> ((0,7),(0,4))
         # axes=(2,0,1) on 3-D: result position k reads old axis axes[k]
