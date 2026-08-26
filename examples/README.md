@@ -12,6 +12,10 @@ implementation is traced, its entries come back as formulas in the
 knots, and the identity with the defining integral is proved for every
 knot vector of that shape at once.
 
+**[sklearn_bug_hunting.ipynb](sklearn_bug_hunting.ipynb)** traces
+BayesianRidge's uncertainty on sklearn 1.8 and 1.9: the bug the 1.9
+release fixed appears as the difference between two formulas.
+
 **[demo.ipynb](demo.ipynb)** is the tour: trace a function, read the
 formula, see the assumptions, watch a refusal.
 
