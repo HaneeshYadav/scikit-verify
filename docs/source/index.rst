@@ -5,7 +5,7 @@ Welcome to scikit-verify's documentation!
    :maxdepth: 2
    :caption: Documentation Navigation:
 
-   readme
+   README
    api
    design_philosophy
 

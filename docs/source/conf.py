@@ -4,24 +4,27 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'scikit-verify'
-copyright = '2026, aadya940'
-author = 'aadya940'
+copyright = '2026, Aadya Chinubhai'
+author = 'Aadya Chinubhai'
 
 # -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = []
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.napoleon',
+    'myst_parser',
+]
 
 templates_path = ['_templates']
 exclude_patterns = []
 
-language = 'It should be a clean documentation that renders:'
+language = 'en'
+
+# the included repo README links to repo files that are not docs pages
+suppress_warnings = ['myst.xref_missing']
 
 # -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
