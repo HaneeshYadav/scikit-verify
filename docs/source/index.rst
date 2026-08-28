@@ -15,6 +15,8 @@ Visual Overview
    :alt: scikit-verify execution flow workflow diagram
 
    Figure 1: High-level overview of the scikit-verify execution flow and formula verification tracking.
+   .. include:: ../examples/readme.md
+   :parser: myst_parser.sphinx_
 
 .. toctree::
    :maxdepth: 2
