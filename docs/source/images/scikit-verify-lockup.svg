@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 90" width="340" height="90" role="img" aria-label="scikit-verify">
+  <title>scikit-verify</title>
+  <rect x="0" y="0" width="340" height="90" rx="10" fill="#ffffff"/>
+  <g transform="translate(6,6) scale(0.34)">
+    <path d="M213.32 147.348c33.869-33.867 39.498-83.146 12.572-110.07-26.922-26.921-76.199-21.293-110.066 12.572-33.867 33.866-24.07 98.568-12.57 110.07 9.293 9.293 76.199 21.293 110.064-12.572z" fill="#f89939"/>
+    <path d="M74.35 98.411c-19.648-19.648-48.242-22.919-63.867-7.295-15.621 15.622-12.355 44.22 7.297 63.865 19.652 19.654 57.195 13.969 63.863 7.295 5.396-5.387 12.361-44.215-7.293-63.865z" fill="#3499cd"/>
+    <path d="M138 82 L162 108 L204 52" fill="none" stroke="#010101" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M138 82 L162 108 L204 52" fill="none" stroke="#ffffff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="100" y="52" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="500" fill="#010101">scikit-<tspan fill="#f89939">verify</tspan></text>
+</svg>
