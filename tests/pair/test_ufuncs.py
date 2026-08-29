@@ -4,10 +4,12 @@ import numpy as np
 import pytest
 import sympy
 
-from skverify import Pair, IDX
+from skverify import IDX, Pair
 from skverify.registry import UFUNC_TABLE
 
 U = sympy.IndexedBase("u")
+V = sympy.IndexedBase("v")
+N = sympy.IndexedBase("n")
 
 
 def make():
@@ -33,15 +35,44 @@ class TestNamedEntries:
         u = make()
         assert (2.0 * np.exp(u)).formula == 2.0 * sympy.exp(U[IDX])
 
-
 ELEMENTWISE = [
     (np_fn, sp_fn)
     for np_fn, sp_fn in UFUNC_TABLE.items()
     if np_fn.nin == 1  # unary only for the loop
 ]
 
+BINARY = [
+    (np_fn, sp_fn)
+    for np_fn, sp_fn in UFUNC_TABLE.items()
+    if np_fn.nin == 2
+]
+
+INTEGER_FIRST = {
+    "eval_legendre",
+    "eval_chebyt",
+    "eval_chebyu",
+    "eval_hermite",
+    "eval_laguerre",
+}
+
 SAFE = {"arccosh": (1.1, 3.0), "arctanh": (-0.9, 0.9)}
 
+
+def binary_inputs(np_fn):
+    u = Pair.array("u", np.linspace(0.25, 0.75, 8))
+    v = Pair.array(
+        "v",
+        np.array([0.25, 0.20, 0.50, 0.40, 0.60, 0.90, 0.70, 0.30]),
+    )
+    n = Pair.array("n", np.arange(1, 9, dtype=np.int64))
+
+    if np_fn.__name__ == "ldexp":
+        return u, n, U, N
+
+    if np_fn.__name__ in INTEGER_FIRST:
+        return n, u, N, U
+
+    return u, v, U, V
 
 @pytest.mark.parametrize(
     "np_fn,sp_fn", ELEMENTWISE, ids=[f.__name__ for f, _ in ELEMENTWISE]
@@ -56,6 +87,26 @@ def test_differential_whole_table(np_fn, sp_fn):
         evaluated = float(out.formula.subs(U[IDX], u.value[k]))
         assert evaluated == pytest.approx(out.value[k], rel=1e-9)
 
+@pytest.mark.parametrize(
+    "np_fn,sp_fn", BINARY, ids=[f.__name__ for f, _ in BINARY]
+)
+def test_differential_binary_table(np_fn, sp_fn):
+    """Every binary table entry: symbolic formula agrees with the computed value."""
+    a, b, a_symbol, b_symbol = binary_inputs(np_fn)
+    out = np_fn(a, b)
+
+    for k in range(3):
+        evaluated = out.formula.subs(
+            {
+                a_symbol[IDX]: a.value[k],
+                b_symbol[IDX]: b.value[k],
+            }
+        )
+
+        if isinstance(evaluated, sympy.logic.boolalg.Boolean):
+            assert bool(evaluated) == bool(out.value[k])
+        else:
+            assert float(evaluated) == pytest.approx(float(out.value[k]), rel=1e-8)
 
 class TestRefusals:
     def test_frexp_composes_from_exact_pieces(self):
