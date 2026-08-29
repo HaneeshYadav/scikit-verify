@@ -6,7 +6,7 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-08-24T14:31:10.382533</dc:date>
+    <dc:date>2026-08-24T14:31:10.221783</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
@@ -32,7 +32,7 @@ z
   <g id="axes_1">
    <g id="text_1">
     <!-- def weighted_rms(x, w): -->
-    <g style="fill: #a0a0a0" transform="translate(10.368 54.026924) scale(0.105 -0.105)">
+    <g style="fill: #555555" transform="translate(10.368 54.026924) scale(0.105 -0.105)">
      <defs>
       <path id="DejaVuSansMono-47" d="M 2681 3053 
 L 2681 4863 
@@ -392,7 +392,7 @@ z
      <use xlink:href="#DejaVuSansMono-1d" transform="translate(1324.46875 0)"/>
     </g>
     <!--     return np.sqrt(np.sum(w * x**2) / np.sum(w)) -->
-    <g style="fill: #a0a0a0" transform="translate(10.368 66.628975) scale(0.105 -0.105)">
+    <g style="fill: #555555" transform="translate(10.368 66.628975) scale(0.105 -0.105)">
      <defs>
       <path id="DejaVuSansMono-58" d="M 609 1325 
 L 609 3494 
@@ -596,7 +596,7 @@ z
    </g>
    <g id="text_2">
     <!-- $\longmapsto$ -->
-    <g style="fill: #e8e8e8" transform="translate(311.04 61.75625) scale(0.16 -0.16)">
+    <g style="fill: #1a1a1a" transform="translate(311.04 61.75625) scale(0.16 -0.16)">
      <defs>
       <path id="DejaVuSans-1057" d="M 897 1741 
 L 897 663 
@@ -621,7 +621,7 @@ z
    </g>
    <g id="text_3">
     <!-- $\sqrt{\dfrac{\sum_{j=0}^{n} w_j\, x_j^2}{\sum_{j=0}^{n} w_j}}$ -->
-    <g style="fill: #e8e8e8" transform="translate(352.512 64.995) scale(0.17 -0.17)">
+    <g style="fill: #1a1a1a" transform="translate(352.512 64.995) scale(0.17 -0.17)">
      <defs>
       <path id="STIXSizeThreeSym-Regular-22" d="M 7104 16416 
 L 3635 -3264 

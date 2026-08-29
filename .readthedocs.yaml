@@ -7,7 +7,7 @@ build:
 
 sphinx:
   configuration: docs/source/conf.py
-  fail_on_warning: false # Changed from true to stop warnings from crashing builds
+  fail_on_warning: true
 
 python:
   install:

@@ -1,22 +1,17 @@
 Welcome to scikit-verify's documentation!
 =========================================
 
-.. image:: /images/scikit-verify-lookup.svg
+.. image:: /images/scikit-verify-lockup.svg
    :width: 150px
    :align: center
-   :alt: scikit-verify project lookup vector logo
+   :alt: scikit-verify logo
 
-Visual Overview
-===============
-
-.. figure:: /images/hero-dark.svg
+.. figure:: /images/hero-light.svg
    :width: 600px
    :align: center
-   :alt: scikit-verify execution flow workflow diagram
+   :alt: tracing real numpy code into a sympy certificate
 
-   Figure 1: High-level overview of the scikit-verify execution flow and formula verification tracking.
-   .. include:: ../examples/readme.md
-   :parser: myst_parser.sphinx_
+   From unmodified numpy code to a symbolic certificate.
 
 .. toctree::
    :maxdepth: 2
