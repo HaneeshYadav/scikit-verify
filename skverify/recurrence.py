@@ -38,6 +38,7 @@ import weakref
 
 import sympy
 
+from .helpers import has_probe, ops_capped, swap_probes
 from .session import current as _session
 
 # iterations before the fold engages: small loops stay unrolled
@@ -65,6 +66,8 @@ class Iterate(sympy.Function):
     symbolic manipulation; ``doit`` unrolls exactly.
     """
 
+    __skv_held__ = True
+
     @classmethod
     def eval(cls, step, init, count):
         return None  # always hold: unrolling is the caller's choice
@@ -89,6 +92,8 @@ class Iterate(sympy.Function):
 
 class Nth(sympy.Function):
     """``Nth(tuple_expr, i)``: held component access, unrolled by doit."""
+
+    __skv_held__ = True
 
     @classmethod
     def eval(cls, expr, i):
@@ -184,30 +189,21 @@ def _inline_passes(expr, mapping, keys):
         if not isinstance(v, sympy.Basic):
             return True
         try:
-            return sympy.count_ops(v) <= 256
+            return ops_capped(v, 257) is not None
         except (TypeError, ValueError):
             return False  # held structures count as heavy
 
     light = {k for k in keys if _small(mapping[k])}
     for round_ in range(64):
         active = keys if round_ < 3 else light
-        present = expr.free_symbols & active
-        if not present:
+        if not has_probe(expr, active):
             break
-        idx_labels = {
-            e.base.label
-            for e in expr.atoms(sympy.Indexed)
-            if getattr(e.base, "label", None) in present
-        }
-        scalars = present - idx_labels
-        if scalars:
-            expr = expr.xreplace({d: mapping[d] for d in scalars})
-        if idx_labels:
-            expr = expr.replace(
-                lambda e: isinstance(e, sympy.Indexed)
-                and getattr(e.base, "label", None) in idx_labels,
-                lambda e: mapping[e.base.label].xreplace({_axis0(): e.indices[0]}),
-            )
+        # scalar symbols and Indexed slots in ONE memoized pass; see
+        # helpers.swap_probes for why sympy's own walkers are
+        # exponential on DAG-shaped bodies
+        expr = swap_probes(
+            expr, {k: mapping[k] for k in active}, _axis0()
+        )
     return expr
 
 
@@ -346,7 +342,7 @@ def on_loop_end(loop_id):
                 isinstance(f, sympy.Basic)
                 and f.free_symbols
                 and not f.is_Symbol
-                and sympy.count_ops(f) > 64
+                and ops_capped(f, 65) is None
             ):
                 sym = sympy.Symbol(
                     _public(_slot_name(rec, pos, f"loop_{j}") + "_final"),
@@ -569,7 +565,7 @@ def _advance(rec, body, sig):
                 isinstance(f, sympy.Basic)
                 and f.free_symbols
                 and not f.is_Symbol
-                and sympy.count_ops(f) > 64
+                and ops_capped(f, 65) is None
             ):
                 sym = sympy.Symbol(
                     _public(
@@ -651,22 +647,19 @@ def _repair(rec, keep_ids=(), lazy=False):
             # NOT marked done: fix() must resolve those round-one refs
 
     def fix(f):
+        from .helpers import has_probe, swap_probes
+
         for _ in range(2):  # round-two meanings may hold round-one symbols
-            present = f.free_symbols & keys
-            if not present:
+            if not has_probe(f, keys):
                 break
-            # one xreplace for scalar occurrences of every present
-            # symbol, one replace pass for all Indexed slots together:
-            # cost is two traversals of f, not one per dummy
-            f = f.xreplace({d: subs[d] for d in present})
-            if f.has(sympy.Indexed):
-                f = f.replace(
-                    lambda e: isinstance(e, sympy.Indexed)
-                    and getattr(e.base, "label", None) in keys,
-                    lambda e: subs[e.base.label].subs(
-                        _axis0(), e.indices[0]
-                    ),
-                )
+            # scalar symbols and Indexed slots in ONE memoized pass:
+            # scatter formulas are DAGs and sympy's xreplace/replace
+            # re-walk shared subtrees every visit (exponential there).
+            # Unevaluated rebuilds: restoring an eager meaning inside
+            # an Abs would otherwise re-run Abs.eval -> signsimp on
+            # the giant body (same discipline as inline/_sweep)
+            with sympy.evaluate(False):
+                f = swap_probes(f, subs, _axis0())
         return f
 
     for ref in () if lazy else rec.get("planted", ()):
