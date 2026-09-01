@@ -192,3 +192,30 @@ class TestSignal:
             return (lambda v: sg.detrend(v, type="constant")), (VALS.copy(),)
 
         check()
+
+
+class TestHonestRefusals:
+    """Functions chosen because they DON'T trace: what a user hits
+    when pointing @specifies at arbitrary scipy. The contract is a
+    skip that blames the tracer, never a failure and never a pass."""
+
+    def test_pearsonr_incomplete(self):
+        U, W = sympy.IndexedBase("u"), sympy.IndexedBase("w")
+        v = check_formula(
+            lambda u, w: st.pearsonr(u, w).statistic,
+            (np.array([1.0, 2.0, 3.0, 4.0]), np.array([2.0, 1.0, 5.0, 3.0])),
+            U[0] * W[0],  # spec content irrelevant: never reached
+        )
+        assert v.tier == "incomplete"
+
+    def test_iqr_incomplete(self):
+        v = check_formula(lambda v: st.iqr(v), (VALS.copy(),), _mean())
+        assert v.tier == "incomplete"
+
+    def test_decorator_skips_not_fails(self):
+        @specifies(V[0])
+        def check():
+            return (lambda v: st.iqr(v)), (VALS.copy(),)
+
+        with pytest.raises(pytest.skip.Exception):
+            check()
