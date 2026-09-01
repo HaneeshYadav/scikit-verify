@@ -26,7 +26,7 @@ class Verdict:
     """The outcome of one spec check. Never a bare boolean: the tier
     and the shape it was decided at are part of the result."""
 
-    tier: str  # "exact" | "float-constant" | "differs" | "incomplete"
+    tier: str  # exact | float-constant | sampled | differs | undecided | incomplete
     shape: tuple
     spec: object = None
     traced: object = None
@@ -35,7 +35,7 @@ class Verdict:
 
     @property
     def matches(self):
-        return self.tier in ("exact", "float-constant")
+        return self.tier in ("exact", "float-constant", "sampled")
 
     def message(self):
         head = f"verdict: {self.tier} (at shape {self.shape})"
@@ -135,26 +135,34 @@ def check_formula(fn, args, spec, indices=(), assume=(), samples=3):
         else:
             t = out.formula.subs(at) if at else out.formula
         s = spec_b.subs(at) if at else spec_b
-        verdict, used_sampling = _entry_equal(t, s, entry, samples, assume)
+        verdict, used_sampling = _entry_equal(
+            t, s, entry, samples, assume, getattr(out, "preconditions", ())
+        )
         sampled = sampled or used_sampling
         if verdict is not None:
             verdict.shape = shape
             return verdict
     # the tier states HOW the decision was made: exact means every
-    # entry's difference vanished symbolically; float-constant means
-    # at least one entry needed arbitration at exact sample points
-    # (the code computes with rounded irrationals, so symbolic zero
-    # is impossible there)
-    tier = "float-constant" if sampled else "exact"
-    detail = (
-        f"{len(entries)}/{len(entries)} entries agree"
-        + (
-            "; code computes with rounded float constants, agreement "
-            f"verified at {samples} exact rational points"
-            if sampled
-            else ""
-        )
-    )
+    # entry's difference vanished symbolically. When at least one
+    # entry needed arbitration at exact sample points, the tier says
+    # WHY symbolic zero was out of reach: float-constant when the
+    # trace carries rounded constants (a zscore's 1/sqrt(5) can never
+    # equal an exact spec), sampled when the reason is structural
+    # (path guards, or a difference simplify cannot close in budget)
+    if not sampled:
+        tier = "exact"
+        why = ""
+    elif isinstance(out.formula, sympy.Basic) and any(
+        isinstance(a, sympy.Float) for a in out.formula.atoms(sympy.Number)
+    ):
+        tier = "float-constant"
+        why = ("; code computes with rounded float constants, agreement "
+               f"verified at {samples} exact rational points")
+    else:
+        tier = "sampled"
+        why = (f"; agreement verified at {samples} exact rational points "
+               "within the traced path's guards")
+    detail = f"{len(entries)}/{len(entries)} entries agree" + why
     return Verdict(tier=tier, shape=shape, spec=spec, detail=detail)
 
 
@@ -212,17 +220,59 @@ def _draw_point(slots, syms, rng, assume, tries=64):
     return None
 
 
-def _entry_equal(t, s, entry, samples, assume=()):
+def _zero_within_budget(d, seconds=10):
+    """Is ``d`` symbolically zero, giving simplify a bounded slice of
+    time? Cheap closers run first (expand, together/cancel); the full
+    simplify runs under a POSIX alarm where available -- a CI tool may
+    never hang on one stubborn difference. On timeout or off-POSIX the
+    answer is False and arbitration decides at sample points."""
+    try:
+        e = sympy.expand(d.doit())
+        if e == 0:
+            return True
+        e2 = sympy.cancel(sympy.together(e))
+        if e2 == 0:
+            return True
+    except Exception:
+        return False
+    import signal
+    import threading
+
+    if (
+        hasattr(signal, "SIGALRM")
+        and threading.current_thread() is threading.main_thread()
+    ):
+        def _timeout(signum, frame):
+            raise TimeoutError
+
+        old = signal.signal(signal.SIGALRM, _timeout)
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        try:
+            return sympy.simplify(e2) == 0
+        except (TimeoutError, Exception):
+            return False
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old)
+    from .helpers import ops_capped
+
+    if ops_capped(e2, 2000) is not None:  # small enough to risk
+        try:
+            return sympy.simplify(e2) == 0
+        except Exception:
+            return False
+    return False
+
+
+def _entry_equal(t, s, entry, samples, assume=(), guards=()):
     """(verdict, used_sampling): verdict is None when the entry
     agrees. Exact tier first, sample-point arbitration second; sample
-    points are drawn to satisfy ``assume`` (a spec is only claimed on
-    its stated domain)."""
-    try:
-        d = sympy.simplify(sympy.expand((t - s).doit()))
-        if d == 0:
-            return None, False
-    except Exception:
-        pass
+    points are drawn to satisfy ``assume`` AND the traced path's own
+    guards -- a per-path formula is only claimed on its path (a
+    chebyshev trace that picked element 2 as the max must not be
+    sampled where element 0 wins)."""
+    if _zero_within_budget(t - s):
+        return None, False
     rng = np.random.default_rng(0)
     # unroll reductions FIRST: a spec's Sum binds a dummy, and only
     # after doit() do its terms carry concrete indices a sample point
@@ -243,7 +293,12 @@ def _entry_equal(t, s, entry, samples, assume=()):
     agree = True
     point = {}
     for _ in range(samples):
-        subs = _draw_point(slots, syms, rng, assume)
+        conds = list(assume)
+        if isinstance(guards, sympy.Basic) and guards not in (sympy.true,):
+            conds.extend(
+                guards.args if isinstance(guards, sympy.And) else [guards]
+            )
+        subs = _draw_point(slots, syms, rng, conds)
         if subs is None:
             return Verdict(
                 tier="undecided",
