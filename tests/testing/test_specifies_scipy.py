@@ -72,12 +72,25 @@ class TestStats:
         assert v.matches
 
     def test_hmean_off_domain_does_not_fake_a_pass(self):
-        # without the positivity assumption the spec is simply not
-        # what scipy computes (nan branches exist): must NOT match
+        # scipy versions differ here: newer ones return nan for
+        # negative data (the trace is a Piecewise over sign patterns),
+        # older ones compute n/sum(1/x) unconditionally. The honest
+        # assertion follows what THIS scipy's trace contains.
+        from skverify import to_sympy
+
+        out = to_sympy(lambda v: st.hmean(v), VALS.copy())
+        branched = isinstance(out.formula, sympy.Basic) and out.formula.has(
+            sympy.Piecewise
+        )
         j = _j()
         spec = N / sympy.Sum(1 / V[j], (j, 0, N - 1))
         v = check_formula(lambda v: st.hmean(v), (VALS.copy(),), spec)
-        assert not v.matches
+        if branched:
+            # nan branches exist: the unqualified spec must NOT match
+            assert not v.matches
+        else:
+            # branch-free implementation IS the spec, everywhere
+            assert v.tier == "exact"
 
 
 class TestIntegrate:
