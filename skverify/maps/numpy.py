@@ -408,10 +408,6 @@ def _sum_plain(a, axis=None, **kwargs):
                 for ax, n in enumerate(np.shape(Pair._value_of(a)))
             ]
             v = np.reshape(np.asarray(r.value), shape)
-
-            formula = r.formula
-            if axis is not None:
-                
             return Pair(v, r.formula, tuple((0, int(n)) for n in shape), steps=(r,))
         return np.reshape(r, [1] * np.ndim(Pair._value_of(a))) if axis is None else r
 
@@ -660,6 +656,10 @@ def _gradient(f, *varargs, axis=None, edge_order=1):
         axes = [(a + nd) % nd for a in axis]
 
     def along(ax, dx):
+        axis_len = f._axis_bounds[ax][1] - f._axis_bounds[ax][0]
+        if edge_order == 2 and axis_len < 3:
+            raise ValueError("Shape of array too small for edge_order 2")
+
         def key(s):
             return tuple(
                 s if d == ax else slice(None) for d in range(nd)
