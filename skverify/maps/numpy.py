@@ -815,8 +815,8 @@ def _empty_like(a, dtype=None, **kwargs):
 def _gradient(f, *varargs, axis=None, edge_order=1):
     if not isinstance(f, Pair):
         raise NotImplementedError("gradient: traced input only")
-    if edge_order != 1:
-        raise NotImplementedError("gradient: edge_order 2 not supported")
+    if edge_order not in (1, 2):
+        raise NotImplementedError("gradient: edge_order must be 1 or 2")
     nd = len(f._axis_bounds)
     if varargs and any(
         not np.isscalar(Pair._value_of(v)) for v in varargs
@@ -830,13 +830,21 @@ def _gradient(f, *varargs, axis=None, edge_order=1):
         spacing = list(varargs)
     else:
         raise NotImplementedError("gradient: spacing arity mismatch")
-    axes = list(range(nd)) if axis is None else [
-        (axis + nd) % nd if np.isscalar(axis) else None
-    ]
-    if axes[0] is None:
-        raise NotImplementedError("gradient: axis tuples not supported")
+        
+    if axis is None:
+        axes = list(range(nd))
+    elif np.isscalar(axis):
+        axes = [(axis + nd) % nd]
+    else:
+        axes = [(a + nd) % nd for a in axis]
+    if len(set(axes)) != len(axes):
+        raise ValueError("repeated axis")
 
     def along(ax, dx):
+        axis_len = f._axis_bounds[ax][1] - f._axis_bounds[ax][0]
+        if edge_order == 2 and axis_len < 3:
+            raise ValueError("Shape of array too small for edge_order 2")
+
         def key(s):
             return tuple(
                 s if d == ax else slice(None) for d in range(nd)
@@ -846,8 +854,12 @@ def _gradient(f, *varargs, axis=None, edge_order=1):
         out[key(slice(1, -1))] = (
             f[key(slice(2, None))] - f[key(slice(None, -2))]
         ) / (2.0 * dx)
-        out[key(0)] = (f[key(1)] - f[key(0)]) / dx
-        out[key(-1)] = (f[key(-1)] - f[key(-2)]) / dx
+        if edge_order == 1:
+            out[key(0)] = (f[key(1)] - f[key(0)]) / dx
+            out[key(-1)] = (f[key(-1)] - f[key(-2)]) / dx
+        elif edge_order == 2:
+            out[key(0)] = (-3.0 * f[key(0)] + 4.0 * f[key(1)] - f[key(2)]) / (2.0 * dx)
+            out[key(-1)] = (3.0 * f[key(-1)] - 4.0 * f[key(-2)] + f[key(-3)]) / (2.0 * dx)
         return out
 
     outs = [along(ax, spacing[ax]) for ax in axes]

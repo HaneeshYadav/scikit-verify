@@ -64,3 +64,44 @@ class TestConstantFields:
         # comparisons are recorded as branch conditions and the trace lives
         r = np.median(make())
         assert float(r.value) == np.median(make().value)
+
+
+class TestGradient:
+    def test_gradient_2d_matches(self):
+        v = np.random.uniform(0.5, 2.0, (4, 5))
+        u = Pair.array("u", v)
+        from skverify.helpers import axis_idx
+        i, j = axis_idx(0), axis_idx(1)
+        mapping = {U[r, c]: v[r, c] for r in range(4) for c in range(5)}
+        for edge_order in (1, 2):
+            gy, gx = np.gradient(u, axis=(0, 1), edge_order=edge_order)
+            ref_gy, ref_gx = np.gradient(v, axis=(0, 1), edge_order=edge_order)
+            for r in range(4):
+                for c in range(5):
+                    fy_val = float(sympy.N(gy.formula.subs({i: r, j: c}).xreplace(mapping)))
+                    assert np.isclose(fy_val, ref_gy[r, c])
+                    fx_val = float(sympy.N(gx.formula.subs({i: r, j: c}).xreplace(mapping)))
+                    assert np.isclose(fx_val, ref_gx[r, c])
+
+    def test_gradient_multi_axis(self):
+        v = np.random.uniform(0.5, 2.0, (4, 5))
+        u = Pair.array("u", v)
+        from skverify.helpers import axis_idx
+        i, j = axis_idx(0), axis_idx(1)
+        mapping = {U[r, c]: v[r, c] for r in range(4) for c in range(5)}
+        gx = np.gradient(u, axis=(1,))
+        ref_gx = np.gradient(v, axis=(1,))
+        for r in range(4):
+            for c in range(5):
+                fx_val = float(sympy.N(gx.formula.subs({i: r, j: c}).xreplace(mapping)))
+                assert np.isclose(fx_val, ref_gx[r, c])
+
+    def test_edge_order_2_size_guard(self):
+        u = make(2)
+        with pytest.raises(ValueError, match="Shape of array too small for edge_order 2"):
+            np.gradient(u, edge_order=2)
+
+    def test_duplicate_axis_rejected_like_numpy(self):
+        u = Pair.array("u", np.ones((3, 4)))
+        with pytest.raises(ValueError, match="repeated axis"):
+            np.gradient(u, axis=(1, 1))
