@@ -17,7 +17,6 @@
 * [Coverage](doc/coverage.md)
 * [License](https://github.com/aadya940/scikit-verify/blob/master/LICENSE)
 * [skverify-mcp](skverify-mcp/) - MCP for mathematical feedback for coding agents
-* [skverify-hypothesis](skverify-hypothesis/) - find every branch, boundary and edge case of your function with Hypothesis
 * [Blog post](https://medium.com/@aadyachinubhai/scikit-verify-translate-python-numpy-programs-to-symbolic-mathematics-c664d41ba571) - the story and the mathematics, with examples
 * [Demo](examples/penalty_matrix_check.ipynb) - a 20-page SciPy derivation, checked
 
@@ -81,7 +80,6 @@ Requires Python >= 3.11, `numpy`, and `sympy`. The import name is
 
 ```bash
 pip install "scikit-verify[mcp]"          # MCP server for coding agents
-pip install "scikit-verify[hypothesis]"   # testing helpers
 ```
 
 Pre-alpha; the API may change. Iterative solvers at real sizes can be

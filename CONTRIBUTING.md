@@ -60,7 +60,7 @@ refuse with one sentence.
 - `skverify/dialect.py` — the extension API for new op meanings
 - `coverage/` — the boards: rerunnable scripts measuring numpy,
   scipy, scikit-learn, statsmodels, cvxpy, and random GitHub code
-- `skverify-mcp/`, `skverify-hypothesis/` — the companion layers
+- `skverify-mcp/` — the MCP server for coding agents
 
 ## Running the boards
 

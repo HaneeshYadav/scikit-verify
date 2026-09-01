@@ -40,7 +40,6 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2,<2"]
-hypothesis = ["hypothesis>=6"]
 docs = [
     "sphinx>=7",
     "sphinx-rtd-theme>=2",
@@ -66,12 +65,10 @@ packages = [
     "skverify.instrument",
     "skverify.maps",
     "skverify_mcp",
-    "skverify_hypothesis",
 ]
 
 [tool.setuptools.package-dir]
 skverify_mcp = "skverify-mcp"
-skverify_hypothesis = "skverify-hypothesis"
 
 [tool.setuptools_scm]
 
