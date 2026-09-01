@@ -100,3 +100,8 @@ class TestGradient:
         u = make(2)
         with pytest.raises(ValueError, match="Shape of array too small for edge_order 2"):
             np.gradient(u, edge_order=2)
+
+    def test_duplicate_axis_rejected_like_numpy(self):
+        u = Pair.array("u", np.ones((3, 4)))
+        with pytest.raises(ValueError, match="repeated axis"):
+            np.gradient(u, axis=(1, 1))

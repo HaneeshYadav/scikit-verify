@@ -654,6 +654,8 @@ def _gradient(f, *varargs, axis=None, edge_order=1):
         axes = [(axis + nd) % nd]
     else:
         axes = [(a + nd) % nd for a in axis]
+    if len(set(axes)) != len(axes):
+        raise ValueError("repeated axis")
 
     def along(ax, dx):
         axis_len = f._axis_bounds[ax][1] - f._axis_bounds[ax][0]
