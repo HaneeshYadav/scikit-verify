@@ -18,7 +18,7 @@ import numpy as np
 import sympy
 
 from .api import to_sympy
-from .helpers import axis_idx
+from .helpers import axis_idx, reevaluated
 
 
 @dataclass
@@ -54,13 +54,64 @@ class Verdict:
 
 
 def check_formula(fn, args, spec, indices=(), assume=(), samples=3):
-    """Trace ``fn`` on ``args`` and compare against ``spec`` per entry.
+    """Trace ``fn`` and compare its formula against ``spec``, per entry.
 
-    ``indices`` binds the spec's index symbols to output axes in
-    order; ``assume`` carries the derivation's preconditions (stored
-    on the verdict today, consumed by normalization as it lands).
-    The verdict is decided AT the traced shape -- the same honesty
-    concolic testing states about fixed inputs.
+    The spec must come from outside the code -- a paper, a docstring,
+    a derivation. The verdict is decided at the traced shape, the same
+    honesty concolic testing states about fixed inputs.
+
+    Parameters
+    ----------
+    fn : callable
+        The function under test. Python + NumPy only; compiled calls
+        inside it produce an ``incomplete`` verdict.
+    args : tuple
+        Concrete arguments to trace on. They fix shapes and the
+        branch taken; the numbers never decide the verdict.
+    spec : sympy.Expr
+        The claimed mathematics, written over IndexedBase symbols
+        named after ``fn``'s parameters (an array argument ``v``
+        appears as ``IndexedBase("v")``).
+    indices : tuple of sympy.Symbol, optional
+        The spec's index symbols, bound to output axes in order:
+        ``indices=(i,)`` makes ``i`` mean "position in the result".
+        Omit for scalar results.
+    assume : iterable of sympy relations, optional
+        The derivation's preconditions, e.g. ``[v[0] > 0]``. Sample
+        points for numeric arbitration are drawn to satisfy them: a
+        spec is only claimed on its stated domain.
+    samples : int, optional
+        Exact rational sample points used when the symbolic
+        difference does not vanish (the float-constant tier).
+
+    Returns
+    -------
+    Verdict
+        ``tier`` is one of ``"exact"``, ``"float-constant"``,
+        ``"differs"``, ``"undecided"``, ``"incomplete"``; see
+        :class:`Verdict`. ``differs`` carries both formulas and a
+        concrete counterexample.
+
+    Examples
+    --------
+    >>> import numpy as np, sympy
+    >>> from skverify.testing import check_formula
+    >>> V = sympy.IndexedBase("v")
+    >>> i = sympy.Symbol("i", integer=True)
+    >>> def affine(v):
+    ...     return 3.0 * v + 1.0
+    >>> v = check_formula(affine, (np.array([1.0, 2.0]),),
+    ...                   3 * V[i] + 1, indices=(i,))
+    >>> v.tier, v.shape
+    ('exact', (2,))
+
+    A wrong implementation returns ``differs`` with a counterexample:
+
+    >>> def wrong(v):
+    ...     return 3.0 * v + 1.5
+    >>> check_formula(wrong, (np.array([1.0, 2.0]),),
+    ...               3 * V[i] + 1, indices=(i,)).tier
+    'differs'
     """
     try:
         out = to_sympy(fn, *args)
@@ -76,11 +127,15 @@ def check_formula(fn, args, spec, indices=(), assume=(), samples=3):
 
     entries = list(np.ndindex(shape)) if shape else [()]
     sampled = False
+    is_array = isinstance(out.formula, sympy.NDimArray)
     for entry in entries:
         at = {axis_idx(k): int(v) for k, v in enumerate(entry)}
-        t = out.formula.subs(at) if at else out.formula
+        if is_array:
+            t = out.formula[entry]  # one expression per element
+        else:
+            t = out.formula.subs(at) if at else out.formula
         s = spec_b.subs(at) if at else spec_b
-        verdict, used_sampling = _entry_equal(t, s, out, entry, samples)
+        verdict, used_sampling = _entry_equal(t, s, entry, samples, assume)
         sampled = sampled or used_sampling
         if verdict is not None:
             verdict.shape = shape
@@ -103,9 +158,65 @@ def check_formula(fn, args, spec, indices=(), assume=(), samples=3):
     return Verdict(tier=tier, shape=shape, spec=spec, detail=detail)
 
 
-def _entry_equal(t, s, out, entry, samples):
+def _rebuilt(e):
+    """Unconditional bottom-up rebuild under normal evaluation.
+    evaluate(False) construction freezes Add/Mul structure so hard
+    that even evalf keeps the shape; a fully substituted, Sum-free
+    sample expression is small enough to just rebuild outright."""
+    if not isinstance(e, sympy.Basic) or not e.args:
+        return e
+    return e.func(*[_rebuilt(a) for a in e.args])
+
+
+def _to_float(expr):
+    """Numeric value of a fully substituted expression. Min/Max will
+    not order a Float against an exact radical even fully rebuilt, so
+    they resolve numerically here, innermost first."""
+    e = _rebuilt(expr)
+    while True:
+        clamps = [
+            m
+            for m in e.atoms(sympy.Min, sympy.Max)
+            if not any(a.has(sympy.Min, sympy.Max) for a in m.args)
+        ]
+        if not clamps:
+            break
+        pick = min if isinstance(clamps[0], sympy.Min) else max
+        val = pick(float(sympy.N(a)) for a in clamps[0].args)
+        e = _rebuilt(e.xreplace({clamps[0]: sympy.Float(val)}))
+    return float(sympy.N(e))
+
+
+def _draw_point(slots, syms, rng, assume, tries=64):
+    """A rational sample point satisfying every assumption, or None.
+    Rejection sampling: cheap for the sign/ordering constraints real
+    specs state, honest (undecided) when the domain is too thin."""
+    for _ in range(tries):
+        subs = {
+            e: sympy.Rational(int(rng.integers(-300, 300)), 100)
+            for e in slots
+        }
+        for sy in syms:
+            if isinstance(sy, sympy.Symbol):
+                subs[sy] = sympy.Rational(int(rng.integers(-300, 300)), 100)
+        ok = True
+        for cond in assume:
+            if not isinstance(cond, sympy.Basic):
+                continue
+            v = cond.doit().xreplace(subs)
+            if v is sympy.false or v == False:
+                ok = False
+                break
+        if ok:
+            return subs
+    return None
+
+
+def _entry_equal(t, s, entry, samples, assume=()):
     """(verdict, used_sampling): verdict is None when the entry
-    agrees. Exact tier first, sample-point arbitration second."""
+    agrees. Exact tier first, sample-point arbitration second; sample
+    points are drawn to satisfy ``assume`` (a spec is only claimed on
+    its stated domain)."""
     try:
         d = sympy.simplify(sympy.expand((t - s).doit()))
         if d == 0:
@@ -132,16 +243,18 @@ def _entry_equal(t, s, out, entry, samples):
     agree = True
     point = {}
     for _ in range(samples):
-        subs = {
-            e: sympy.Rational(int(rng.integers(-300, 300)), 100)
-            for e in slots
-        }
-        for sy in syms:
-            if isinstance(sy, sympy.Symbol):
-                subs[sy] = sympy.Rational(int(rng.integers(-300, 300)), 100)
+        subs = _draw_point(slots, syms, rng, assume)
+        if subs is None:
+            return Verdict(
+                tier="undecided",
+                shape=(),
+                spec=s,
+                traced=t,
+                detail=f"entry {entry}: no sample point satisfies the assumptions",
+            ), True
         try:
-            tv = float(sympy.N(td.xreplace(subs)))
-            sv = float(sympy.N(sd.xreplace(subs)))
+            tv = _to_float(td.xreplace(subs))
+            sv = _to_float(sd.xreplace(subs))
         except (TypeError, ValueError):
             return Verdict(
                 tier="undecided",
@@ -169,12 +282,58 @@ def _entry_equal(t, s, out, entry, samples):
 
 
 def specifies(spec, indices=(), assume=()):
-    """Pytest decorator. The test function RETURNS ``(fn, args)``; the
-    trace stays under skverify's control::
+    """Assert that a function implements a formula, as a pytest test.
 
-        @specifies((x[i] - mean) / std, indices=(i,))
-        def test_scale():
-            return scale, (np.array([1.0, 4.0, 2.0, 8.0, 5.0]),)
+    The decorated test RETURNS ``(fn, args)`` instead of calling
+    anything -- the trace stays under skverify's control. A matching
+    spec passes; a mismatch fails with both formulas and a concrete
+    counterexample; a tracer refusal skips (a tracer limit is not a
+    code bug).
+
+    Parameters
+    ----------
+    spec : sympy.Expr
+        The claimed mathematics; see :func:`check_formula`.
+    indices : tuple of sympy.Symbol, optional
+        Index symbols bound to output axes in order.
+    assume : iterable of sympy relations, optional
+        The derivation's preconditions; sample points respect them.
+
+    Examples
+    --------
+    The docstring of ``scipy.integrate.trapezoid`` for five samples
+    with unit spacing, as a test::
+
+        import numpy as np, sympy
+        from scipy.integrate import trapezoid
+        from skverify.testing import specifies
+
+        Y = sympy.IndexedBase("y")
+
+        @specifies(Y[0]/2 + Y[1] + Y[2] + Y[3] + Y[4]/2)
+        def test_trapezoid_is_its_docstring():
+            return (lambda y: trapezoid(y),
+                    (np.array([0.7, 1.2, 2.5, 0.3, 0.4]),))
+
+    An entrywise spec binds an index symbol::
+
+        i = sympy.Symbol("i", integer=True)
+        V = sympy.IndexedBase("v")
+
+        @specifies(3 * V[i] + 1, indices=(i,))
+        def test_affine():
+            return my_affine, (np.array([1.0, 2.0]),)
+
+    A precondition-carrying spec (harmonic mean is only claimed for
+    positive data; scipy returns nan otherwise)::
+
+        j = sympy.Dummy("j", integer=True)
+        spec = 5 / sympy.Sum(1 / V[j], (j, 0, 4))
+
+        @specifies(spec, assume=[V[k] > 0 for k in range(5)])
+        def test_hmean():
+            return (lambda v: scipy.stats.hmean(v),
+                    (np.array([0.7, 1.2, 2.5, 0.3, 0.4]),))
     """
 
     def deco(test_fn):
@@ -195,12 +354,34 @@ def specifies(spec, indices=(), assume=()):
 
 
 def _property(prop, assume=()):
-    """Property rung: assert a fact about the traced certificate
-    itself, no closed form needed::
+    """Assert a property of the traced certificate, no closed form
+    needed.
 
-        @specifies.property(lambda F: sympy.Sum(F[i], (i, 0, 4)) == 0)
-        def test_centered():
-            return center, (data,)
+    Where :func:`specifies` checks *what* the code computes, this
+    checks a fact the paper proves about it -- the stronger rung when
+    nobody knows the entries.
+
+    Parameters
+    ----------
+    prop : callable
+        Receives the traced formula, returns a sympy relation (or a
+        plain boolean). The relation must simplify to true.
+    assume : iterable of sympy relations, optional
+        Reserved for domain-restricted properties.
+
+    Examples
+    --------
+    Centered data sums to exactly zero, whatever the input::
+
+        import sympy
+        from skverify.testing import specifies
+        i = sympy.Symbol("i", integer=True)
+
+        @specifies.property(
+            lambda F: sympy.Eq(sum(F.subs(i, k) for k in range(5)), 0)
+        )
+        def test_centering_kills_the_mean():
+            return (lambda v: v - v.mean(), (data,))
     """
 
     def deco(test_fn):
