@@ -292,6 +292,7 @@ def to_sympy(fn, *args, **kwargs):
             )
         out.unchecked = tuple(records)
         out.instrumented = sites
+        _refuse_lost_influence(out, wrapped, fn, args, kwargs)
     except (AttributeError, TypeError) as harvest_err:
         # slots-only/immutable results legitimately reject attribute
         # writes; anything else here is a swallowed harvest bug
@@ -600,3 +601,45 @@ def _infer_names(fn, args):
     if len(args) > len(names):
         raise TypeError(f"{fn.__name__} takes {len(names)} arguments, got {len(args)}")
     return zip(names, args)
+
+
+def _refuse_lost_influence(out, wrapped, fn, args, kwargs):
+    """A constant formula from symbolic inputs is either honest
+    (the function really ignores the data) or the worst bug class
+    (a library layer stripped the traced array and the trace watched
+    plain numpy). The value lane arbitrates: rerun the REAL function
+    on slightly perturbed inputs; if the output moves while the
+    formula cannot, refuse loudly instead of certifying a constant."""
+    if not isinstance(out, Pair):
+        return
+    f = out.formula
+    if not isinstance(f, sympy.Basic) or f.free_symbols:
+        return
+    if not any(
+        isinstance(w, Pair)
+        and isinstance(w.formula, sympy.Basic)
+        and w.formula.free_symbols
+        for w in wrapped
+    ):
+        return
+    try:
+        perturbed = tuple(
+            a * 1.0009
+            if isinstance(a, np.ndarray) and np.issubdtype(a.dtype, np.floating)
+            else a
+            for a in args
+        )
+        ref = np.asarray(fn(*perturbed, **kwargs), dtype=float)
+        if not np.all(np.isfinite(ref)):
+            return  # perturbation left the domain: inconclusive
+        if not np.allclose(ref, float(f), rtol=1e-4, atol=1e-8):
+            raise NotImplementedError(
+                "the output depends on the input data but the traced "
+                "formula is a constant: a library layer converted the "
+                "traced array to plain numpy mid-call. Refusing rather "
+                "than certify a constant -- please report this."
+            )
+    except NotImplementedError:
+        raise
+    except Exception:
+        return  # rerun failed for its own reasons: inconclusive

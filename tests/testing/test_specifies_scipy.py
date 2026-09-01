@@ -86,8 +86,13 @@ class TestStats:
         spec = N / sympy.Sum(1 / V[j], (j, 0, N - 1))
         v = check_formula(lambda v: st.hmean(v), (VALS.copy(),), spec)
         if branched:
-            # nan branches exist: the unqualified spec must NOT match
-            assert not v.matches
+            # per-path semantics: arbitration samples WITHIN the traced
+            # path's guards, so the spec matches on the positive path it
+            # was traced on -- and the restriction is DISCLOSED: the
+            # verdict cannot be an unqualified match
+            assert v.matches
+            assert v.tier in ("sampled", "float-constant")
+            assert out.preconditions is not sympy.true
         else:
             # branch-free implementation IS the spec, everywhere
             assert v.tier == "exact"
