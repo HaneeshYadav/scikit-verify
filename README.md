@@ -64,6 +64,26 @@ Tested against numpy, scipy, scikit-learn, statsmodels, cvxpy and
 random research code from GitHub; the boards in [coverage](coverage/)
 regenerate every number.
 
+You can also state the formula you believe and let the trace check it,
+as an ordinary pytest test:
+
+```python
+import sympy
+from scipy.integrate import simpson
+from skverify.testing import specifies
+
+y = sympy.IndexedBase("y")
+
+@specifies((y[0] + 4*y[1] + 2*y[2] + 4*y[3] + y[4]) / 3)
+def test_simpson_is_the_textbook_rule():
+    return (lambda v: simpson(v)), (np.array([0.7, 1.2, 2.5, 0.3, 0.4]),)
+```
+
+The comparison is symbolic, not sampled: a passing test means the code
+computes that formula for every input of that shape, and a failing one
+prints both formulas with a concrete counterexample. Specs come from
+the paper or the docstring, never from the trace itself.
+
 ## Installation
 
 ```bash
