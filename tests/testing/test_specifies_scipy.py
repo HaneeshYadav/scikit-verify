@@ -232,3 +232,60 @@ class TestHonestRefusals:
 
         with pytest.raises(pytest.skip.Exception):
             check()
+
+
+class TestInterpolate:
+    """The north-star module. Coefficient and evaluation claims that
+    hold exactly, plus the algebraic crown: two different
+    interpolation algorithms proven to compute the same polynomial."""
+
+    XS = np.array([0.0, 1.0, 2.0, 3.0])
+    YS = np.array([1.0, 3.0, 2.0, 5.0])
+
+    def test_linear_spline_coefficients_are_the_data(self):
+        # k=1 B-spline interpolation: the coefficients ARE the values
+        import scipy.interpolate as ip
+
+        Y = sympy.IndexedBase("y")
+        v = check_formula(
+            lambda x, y: ip.make_interp_spline(x, y, k=1).c,
+            (self.XS.copy(), self.YS.copy()),
+            Y[i], indices=(i,),
+        )
+        assert v.tier == "exact"
+
+    def test_cubicspline_constant_row_interpolates(self):
+        # c[3, j] is S(x_j): the spline passes through the data,
+        # stated as a formula rather than a float comparison
+        import scipy.interpolate as ip
+
+        Y = sympy.IndexedBase("y")
+        v = check_formula(
+            lambda x, y: ip.CubicSpline(x, y).c[3],
+            (self.XS.copy(), self.YS.copy()),
+            Y[i], indices=(i,),
+        )
+        assert v.tier == "exact"
+
+    def test_krogh_equals_lagrange(self):
+        # KroghInterpolator computes via Newton divided differences;
+        # the Lagrange formula is a different algorithm for the same
+        # polynomial. Traced Newton == textbook Lagrange, exactly:
+        # a theorem between two algorithms, not a point check.
+        import scipy.interpolate as ip
+
+        X, Y = sympy.IndexedBase("x"), sympy.IndexedBase("y")
+        half = sympy.Rational(1, 2)
+        lagrange = sum(
+            Y[jj]
+            * sympy.prod(
+                [(half - X[m]) / (X[jj] - X[m]) for m in range(4) if m != jj]
+            )
+            for jj in range(4)
+        )
+        v = check_formula(
+            lambda x, y: ip.KroghInterpolator(x, y)(0.5),
+            (self.XS.copy(), self.YS.copy()),
+            lagrange,
+        )
+        assert v.tier == "exact"
